@@ -1,0 +1,197 @@
+:root {
+  --bg-color: #f6f8fa;
+  --panel-bg: rgba(255, 255, 255, 0.85);
+  --text-primary: #1f2328;
+  --text-secondary: #656d76;
+  --primary-accent: #0969da;
+  --border-color: rgba(31, 35, 40, 0.15);
+  --glow-color: rgba(9, 105, 218, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.app-header {
+  padding: 1.5rem 2rem;
+  background: linear-gradient(180deg, rgba(246, 248, 250, 1) 0%, rgba(246, 248, 250, 0.8) 100%);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 10;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  background: -webkit-linear-gradient(45deg, #0969da, #8250df);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 0.25rem;
+}
+
+.app-header p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+#map-container {
+  position: relative;
+  flex-grow: 1;
+  width: 100%;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background-color: #e5e7eb;
+}
+
+/* Glassmorphism coordinates panel */
+.glass-panel {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 500px;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  animation: slideUp 0.5s ease-out;
+}
+
+.glass-panel:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 15px var(--glow-color);
+  border-color: rgba(31, 35, 40, 0.25);
+}
+
+.panel-header h3 {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-header h3::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--primary-accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--primary-accent);
+}
+
+.placeholder-text {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-style: italic;
+  text-align: center;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.coord-output {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.format-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: -0.5rem;
+}
+
+.coord-output code {
+  display: block;
+  background: rgba(246, 248, 250, 0.8);
+  padding: 1rem;
+  border-radius: 8px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.9rem;
+  color: #0550ae;
+  border: 1px solid rgba(9, 105, 218, 0.2);
+  word-break: break-all;
+}
+
+.glow-btn {
+  background: transparent;
+  color: var(--primary-accent);
+  border: 1px solid var(--primary-accent);
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  align-self: flex-end;
+}
+
+.glow-btn:hover {
+  background: var(--primary-accent);
+  color: var(--bg-color);
+  box-shadow: 0 0 12px var(--glow-color);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Customize Leaflet elements for dark mode */
+.leaflet-control-zoom a {
+  background-color: var(--panel-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+  backdrop-filter: blur(8px);
+}
+.leaflet-control-zoom a:hover {
+  background-color: rgba(230, 230, 230, 0.8) !important;
+}
+
+.leaflet-draw-toolbar a {
+  background-color: var(--panel-bg) !important;
+  border-color: var(--border-color) !important;
+}
+
+.leaflet-control-attribution {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--text-secondary) !important;
+  backdrop-filter: blur(4px);
+}
+.leaflet-control-attribution a {
+  color: var(--primary-accent) !important;
+}
