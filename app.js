@@ -145,7 +145,7 @@ function updateCoordinatesPanel(bounds) {
 
 // Copy to clipboard functionality
 copyBtn.addEventListener('click', () => {
-  const textToCopy = `- ${minXEl.innerText}, ${minYEl.innerText}, ${maxXEl.innerText}, ${maxYEl.innerText}`;
+  const textToCopy = `${minXEl.innerText}, ${minYEl.innerText}, ${maxXEl.innerText}, ${maxYEl.innerText}`;
   navigator.clipboard.writeText(textToCopy).then(() => {
     const originalText = copyBtn.innerText;
     copyBtn.innerText = 'Copied!';
