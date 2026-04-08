@@ -5,8 +5,8 @@ const map = L.map('map', {
   zoomControl: false // We reposition it later
 });
 
-// Add zoom control at bottom right to not overlap with top components
-L.control.zoom({ position: 'bottomright' }).addTo(map);
+// Add zoom control at bottom left
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
 // Define base tile layers
 const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -42,15 +42,15 @@ const baseMaps = {
   "Satellite": esriSatellite
 };
 
-// Add to top left to avoid overlapping with draw tools on the right
-L.control.layers(baseMaps, null, { position: 'topleft' }).addTo(map);
+// Add layer control to top right
+L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
 // Set up the Leaflet Draw Control
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 
 const drawControl = new L.Control.Draw({
-  position: 'topright',
+  position: 'topleft',
   edit: {
     featureGroup: drawnItems,
     remove: true
@@ -59,9 +59,9 @@ const drawControl = new L.Control.Draw({
     // Only enable rectangle drawing for bounding box
     rectangle: {
       shapeOptions: {
-        color: '#58a6ff',
+        color: '#3fb950',
         weight: 2,
-        fillColor: '#58a6ff',
+        fillColor: '#3fb950',
         fillOpacity: 0.1
       }
     },
@@ -93,7 +93,7 @@ map.on(L.Draw.Event.CREATED, function (e) {
   if (type === 'rectangle') {
     // Clear previous boxes
     drawnItems.clearLayers();
-    
+
     // Add the new valid box
     drawnItems.addLayer(layer);
     currentLayer = layer;
@@ -149,7 +149,7 @@ copyBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(textToCopy).then(() => {
     const originalText = copyBtn.innerText;
     copyBtn.innerText = 'Copied!';
-    
+
     // Some visual feedback color change 
     copyBtn.style.color = '#3fb950';
     copyBtn.style.borderColor = '#3fb950';
