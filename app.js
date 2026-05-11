@@ -115,8 +115,10 @@ map.on(L.Draw.Event.EDITED, function (e) {
 map.on(L.Draw.Event.DELETED, function (e) {
   if (drawnItems.getLayers().length === 0) {
     currentLayer = null;
-    coordPlaceholder.classList.remove('hidden');
-    coordOutput.classList.add('hidden');
+    minXEl.innerText = '0.0000';
+    minYEl.innerText = '0.0000';
+    maxXEl.innerText = '0.0000';
+    maxYEl.innerText = '0.0000';
   } else {
     // If there's still a layer somehow, update it
     const layers = drawnItems.getLayers();
@@ -137,10 +139,6 @@ function updateCoordinatesPanel(bounds) {
   minYEl.innerText = formatCoord(sw.lat);
   maxXEl.innerText = formatCoord(ne.lng);
   maxYEl.innerText = formatCoord(ne.lat);
-
-  // Show panel contents
-  coordPlaceholder.classList.add('hidden');
-  coordOutput.classList.remove('hidden');
 }
 
 // Copy to clipboard functionality
@@ -161,3 +159,73 @@ copyBtn.addEventListener('click', () => {
     }, 2000);
   });
 });
+
+// Handle manual coordinate input
+function handleManualCoordinateInput() {
+  const x1 = parseFloat(minXEl.innerText);
+  const y1 = parseFloat(minYEl.innerText);
+  const x2 = parseFloat(maxXEl.innerText);
+  const y2 = parseFloat(maxYEl.innerText);
+
+  // Validate numbers
+  if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) return;
+
+  // Ensure bounds are always valid regardless of input order
+  const minLat = Math.min(y1, y2);
+  const maxLat = Math.max(y1, y2);
+  const minLng = Math.min(x1, x2);
+  const maxLng = Math.max(x1, x2);
+
+  const bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
+
+  if (!currentLayer) {
+    // Create new layer if none exists
+    currentLayer = L.rectangle(bounds, {
+      color: '#3fb950',
+      weight: 2,
+      fillColor: '#3fb950',
+      fillOpacity: 0.1
+    });
+    drawnItems.addLayer(currentLayer);
+  } else {
+    // Update existing layer
+    currentLayer.setBounds(bounds);
+  }
+}
+
+// Attach event listeners for real-time input
+[minXEl, minYEl, maxXEl, maxYEl].forEach(el => {
+  el.addEventListener('input', handleManualCoordinateInput);
+  
+  // Prevent multiline from Enter key
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      el.blur();
+    }
+  });
+
+  // Handle pasting all 4 coordinates at once
+  el.addEventListener('paste', (e) => {
+    let paste = (e.clipboardData || window.clipboardData).getData('text');
+    let numbers = paste.match(/-?\d+(\.\d+)?/g);
+    
+    if (numbers && numbers.length >= 4) {
+      e.preventDefault(); // Stop normal paste
+      minXEl.innerText = numbers[0];
+      minYEl.innerText = numbers[1];
+      maxXEl.innerText = numbers[2];
+      maxYEl.innerText = numbers[3];
+      
+      handleManualCoordinateInput();
+      
+      // Auto-center map on the new pasted bounds
+      if (currentLayer) {
+        map.fitBounds(currentLayer.getBounds(), { padding: [20, 20] });
+      }
+      
+      el.blur();
+    }
+  });
+});
+

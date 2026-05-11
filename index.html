@@ -6,7 +6,7 @@
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-B7DKVPT762"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
+    function gtag() { dataLayer.push(arguments); }
     gtag('js', new Date());
 
     gtag('config', 'G-B7DKVPT762');
@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 
 <body>
@@ -49,11 +49,10 @@
           <h3>Bounding Box Output</h3>
         </div>
         <div class="panel-content">
-          <p class="placeholder-text" id="coord-placeholder">Select the rectangle tool (top left) and draw on the map.
-          </p>
-          <div class="coord-output hidden" id="coord-output">
+          <p class="placeholder-text" id="coord-placeholder">Draw on the map or type coordinates below.</p>
+          <div class="coord-output" id="coord-output">
             <p class="format-label">Format: (xmin, ymin, xmax, ymax) / (lon_min, lat_min, lon_max, lat_max)</p>
-            <code><span id="min-x">0.0</span>, <span id="min-y">0.0</span>, <span id="max-x">0.0</span>, <span id="max-y">0.0</span></code>
+            <code><span id="min-x" contenteditable="true">0.0</span>, <span id="min-y" contenteditable="true">0.0</span>, <span id="max-x" contenteditable="true">0.0</span>, <span id="max-y" contenteditable="true">0.0</span></code>
             <button id="copy-btn" class="glow-btn">Copy</button>
           </div>
         </div>
@@ -61,7 +60,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=2"></script>
+  <script src="app.js"></script>
 </body>
 
 </html>

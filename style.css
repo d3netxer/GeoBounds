@@ -147,6 +147,29 @@ body {
   word-break: break-all;
 }
 
+.coord-output code span[contenteditable="true"] {
+  padding: 2px 4px;
+  border-radius: 4px;
+  min-width: 30px;
+  display: inline-block;
+  text-align: center;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: text;
+}
+
+.coord-output code span[contenteditable="true"]:hover {
+  background-color: rgba(9, 105, 218, 0.1);
+  border-color: rgba(9, 105, 218, 0.3);
+}
+
+.coord-output code span[contenteditable="true"]:focus {
+  outline: none;
+  background-color: #fff;
+  border-color: #0969da;
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.2);
+}
+
 .glow-btn {
   background: transparent;
   color: var(--primary-accent);
