@@ -219,9 +219,12 @@ function handleManualCoordinateInput() {
       
       handleManualCoordinateInput();
       
-      // Auto-center map on the new pasted bounds
+      // Auto-center map on the new pasted bounds with extra padding so the UI doesn't cover it
       if (currentLayer) {
-        map.fitBounds(currentLayer.getBounds(), { padding: [20, 20] });
+        map.fitBounds(currentLayer.getBounds(), { 
+          paddingTopLeft: [50, 50], 
+          paddingBottomRight: [50, 250] 
+        });
       }
       
       el.blur();
