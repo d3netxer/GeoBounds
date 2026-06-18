@@ -245,8 +245,8 @@ async function handleSearch() {
   searchBtn.disabled = true;
 
   try {
-    // Fetch up to 5 results so we can prioritize polygons
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&polygon_geojson=1&limit=5`);
+    // Fetch up to 5 results so we can prioritize polygons. Use polygon_threshold to simplify geometry and massively speed up the request.
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&polygon_geojson=1&polygon_threshold=0.005&limit=5`);
     const data = await response.json();
 
     if (data && data.length > 0) {
