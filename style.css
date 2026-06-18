@@ -61,6 +61,16 @@ body {
   width: 100%;
 }
 
+#map-container.drag-over::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(9, 105, 218, 0.2);
+  border: 4px dashed #0969da;
+  z-index: 9999;
+  pointer-events: none;
+}
+
 #map {
   width: 100%;
   height: 100%;
@@ -257,4 +267,65 @@ body {
   background-position: center !important;
   background-size: 18px !important;
   background-repeat: no-repeat !important;
+}
+
+/* Search Panel Styles */
+.search-panel {
+  top: 1.5rem;
+  right: 1.5rem;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  width: auto;
+  max-width: 400px;
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem;
+  animation: slideLeft 0.5s ease-out;
+}
+
+#search-input {
+  flex-grow: 1;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.9);
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+#search-input:focus {
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.2);
+}
+
+@keyframes slideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Popup Button Style */
+.popup-btn {
+  background: var(--primary-accent);
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 5px;
+  transition: background 0.2s;
+}
+
+.popup-btn:hover {
+  background: #0550ae;
 }

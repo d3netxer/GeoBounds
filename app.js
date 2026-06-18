@@ -232,3 +232,162 @@ function handleManualCoordinateInput() {
   });
 });
 
+// Search functionality
+const searchInput = document.getElementById('search-input');
+const searchBtn = document.getElementById('search-btn');
+let searchPolygonLayer = null;
+
+async function handleSearch() {
+  const query = searchInput.value.trim();
+  if (!query) return;
+
+  searchBtn.innerText = '...';
+  searchBtn.disabled = true;
+
+  try {
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&polygon_geojson=1&limit=1`);
+    const data = await response.json();
+
+    if (data && data.length > 0) {
+      const result = data[0];
+      
+      if (searchPolygonLayer) {
+        map.removeLayer(searchPolygonLayer);
+      }
+
+      if (result.geojson) {
+        searchPolygonLayer = L.geoJSON(result.geojson, {
+          style: {
+            color: '#0969da',
+            weight: 2,
+            fillColor: '#0969da',
+            fillOpacity: 0.1
+          }
+        }).addTo(map);
+
+        map.fitBounds(searchPolygonLayer.getBounds(), { padding: [50, 50] });
+
+        const popupContent = `
+          <div style="text-align: center;">
+            <strong>${result.display_name.split(',')[0]}</strong><br>
+            <button id="popup-create-bbox" class="popup-btn">Create Bounding Box</button>
+          </div>
+        `;
+        searchPolygonLayer.bindPopup(popupContent).openPopup();
+
+      } else {
+        const bbox = result.boundingbox;
+        const bounds = L.latLngBounds([bbox[0], bbox[2]], [bbox[1], bbox[3]]);
+        map.fitBounds(bounds, { padding: [50, 50] });
+        alert('No exact polygon found, but zoomed to general location.');
+      }
+    } else {
+      alert('Location not found. Try a different search.');
+    }
+  } catch (err) {
+    console.error('Search error:', err);
+    alert('An error occurred while searching.');
+  } finally {
+    searchBtn.innerText = 'Search';
+    searchBtn.disabled = false;
+  }
+}
+
+searchBtn.addEventListener('click', handleSearch);
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleSearch();
+});
+
+map.on('popupopen', function(e) {
+  const createBtn = document.getElementById('popup-create-bbox');
+  if (createBtn && searchPolygonLayer) {
+    createBtn.onclick = function() {
+      createBoundingBoxFromLayer(searchPolygonLayer);
+      map.closePopup();
+    };
+  }
+});
+
+function createBoundingBoxFromLayer(layer) {
+  const bounds = layer.getBounds();
+  
+  if (!currentLayer) {
+    currentLayer = L.rectangle(bounds, {
+      color: '#3fb950',
+      weight: 2,
+      fillColor: '#3fb950',
+      fillOpacity: 0.1
+    });
+    drawnItems.addLayer(currentLayer);
+  } else {
+    currentLayer.setBounds(bounds);
+  }
+  
+  updateCoordinatesPanel(bounds);
+}
+
+// GeoJSON Drag and Drop
+const mapContainerEl = document.getElementById('map-container');
+
+mapContainerEl.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  mapContainerEl.classList.add('drag-over');
+});
+
+mapContainerEl.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  // Prevent flickering when dragging over child elements
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    mapContainerEl.classList.remove('drag-over');
+  }
+});
+
+mapContainerEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+  mapContainerEl.classList.remove('drag-over');
+
+  if (e.dataTransfer.files.length > 0) {
+    const file = e.dataTransfer.files[0];
+    
+    if (file.name.endsWith('.json') || file.name.endsWith('.geojson')) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const geojsonData = JSON.parse(event.target.result);
+          
+          if (searchPolygonLayer) {
+            map.removeLayer(searchPolygonLayer);
+          }
+
+          searchPolygonLayer = L.geoJSON(geojsonData, {
+            style: {
+              color: '#0969da',
+              weight: 2,
+              fillColor: '#0969da',
+              fillOpacity: 0.1
+            }
+          }).addTo(map);
+
+          map.fitBounds(searchPolygonLayer.getBounds(), { padding: [50, 50] });
+
+          const popupContent = `
+            <div style="text-align: center;">
+              <strong>${file.name}</strong><br>
+              <button id="popup-create-bbox" class="popup-btn">Create Bounding Box</button>
+            </div>
+          `;
+          searchPolygonLayer.bindPopup(popupContent).openPopup();
+          
+        } catch (err) {
+          console.error('Invalid GeoJSON', err);
+          alert('Could not parse GeoJSON file. Ensure it is valid JSON.');
+        }
+      };
+      reader.readAsText(file);
+    } else {
+      alert('Please drop a valid .json or .geojson file.');
+    }
+  }
+});
+
+
