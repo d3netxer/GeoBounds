@@ -112,6 +112,13 @@ map.on(L.Draw.Event.EDITED, function (e) {
   });
 });
 
+// Update coordinates live while editing without needing to click save
+map.on('draw:editvertex draw:editmove draw:editresize', function (e) {
+  if (currentLayer) {
+    updateCoordinatesPanel(currentLayer.getBounds());
+  }
+});
+
 // Handle deletion
 map.on(L.Draw.Event.DELETED, function (e) {
   if (drawnItems.getLayers().length === 0) {
@@ -153,50 +160,6 @@ function updateCoordinatesPanel(bounds) {
   maxXEl.innerText = formatCoord(ne.lng);
   maxYEl.innerText = formatCoord(ne.lat);
 }
-
-// Copy to clipboard functionality
-copyBtn.addEventListener('click', () => {
-  const textToCopy = `${minXEl.innerText}, ${minYEl.innerText}, ${maxXEl.innerText}, ${maxYEl.innerText}`;
-  navigator.clipboard.writeText(textToCopy).then(() => {
-    const originalText = copyBtn.innerText;
-    copyBtn.innerText = 'Copied!';
-
-    // Some visual feedback color change 
-    copyBtn.style.color = '#3fb950';
-    copyBtn.style.borderColor = '#3fb950';
-
-    setTimeout(() => {
-      copyBtn.innerText = originalText;
-      copyBtn.style.color = '';
-      copyBtn.style.borderColor = '';
-    }, 2000);
-  });
-});
-
-// Edit button logic
-const editBtn = document.getElementById('edit-btn');
-let isEditingBox = false;
-
-editBtn.addEventListener('click', () => {
-  if (currentLayer) {
-    if (isEditingBox) {
-      currentLayer.editing.disable();
-      editBtn.innerText = 'Edit Box';
-      editBtn.style.color = '';
-      editBtn.style.borderColor = '';
-      isEditingBox = false;
-      updateCoordinatesPanel(currentLayer.getBounds());
-    } else {
-      currentLayer.editing.enable();
-      editBtn.innerText = 'Save Edits';
-      editBtn.style.color = '#e3b341'; // Yellow warning-ish color for edit mode
-      editBtn.style.borderColor = '#e3b341';
-      isEditingBox = true;
-    }
-  } else {
-    alert("Please draw or create a bounding box first!");
-  }
-});
 
 // Handle manual coordinate input
 function handleManualCoordinateInput() {
