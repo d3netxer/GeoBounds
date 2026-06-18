@@ -75,6 +75,7 @@ const drawControl = new L.Control.Draw({
 map.addControl(drawControl);
 
 // UI Elements
+const coordPanel = document.getElementById('coordinates-panel');
 const coordPlaceholder = document.getElementById('coord-placeholder');
 const coordOutput = document.getElementById('coord-output');
 const minXEl = document.getElementById('min-x');
@@ -115,6 +116,13 @@ map.on(L.Draw.Event.EDITED, function (e) {
 map.on(L.Draw.Event.DELETED, function (e) {
   if (drawnItems.getLayers().length === 0) {
     currentLayer = null;
+    coordPlaceholder.style.display = 'block';
+    coordOutput.style.display = 'none';
+
+    if (coordPanel && !searchPolygonLayer) {
+      coordPanel.classList.remove('panel-right');
+    }
+    
     minXEl.innerText = '0.0000';
     minYEl.innerText = '0.0000';
     maxXEl.innerText = '0.0000';
@@ -128,6 +136,11 @@ map.on(L.Draw.Event.DELETED, function (e) {
 });
 
 function updateCoordinatesPanel(bounds) {
+  if (coordPanel) coordPanel.classList.add('panel-right');
+
+  coordPlaceholder.style.display = 'none';
+  coordOutput.style.display = 'block';
+
   const sw = bounds.getSouthWest();
   const ne = bounds.getNorthEast();
 
@@ -158,6 +171,31 @@ copyBtn.addEventListener('click', () => {
       copyBtn.style.borderColor = '';
     }, 2000);
   });
+});
+
+// Edit button logic
+const editBtn = document.getElementById('edit-btn');
+let isEditingBox = false;
+
+editBtn.addEventListener('click', () => {
+  if (currentLayer) {
+    if (isEditingBox) {
+      currentLayer.editing.disable();
+      editBtn.innerText = 'Edit Box';
+      editBtn.style.color = '';
+      editBtn.style.borderColor = '';
+      isEditingBox = false;
+      updateCoordinatesPanel(currentLayer.getBounds());
+    } else {
+      currentLayer.editing.enable();
+      editBtn.innerText = 'Save Edits';
+      editBtn.style.color = '#e3b341'; // Yellow warning-ish color for edit mode
+      editBtn.style.borderColor = '#e3b341';
+      isEditingBox = true;
+    }
+  } else {
+    alert("Please draw or create a bounding box first!");
+  }
 });
 
 // Handle manual coordinate input
@@ -269,6 +307,7 @@ async function handleSearch() {
         }).addTo(map);
 
         map.fitBounds(searchPolygonLayer.getBounds(), { padding: [50, 50] });
+        if (coordPanel) coordPanel.classList.add('panel-right');
 
         const popupContent = `
           <div style="text-align: center;">
@@ -372,6 +411,7 @@ mapContainerEl.addEventListener('drop', (e) => {
           }).addTo(map);
 
           map.fitBounds(searchPolygonLayer.getBounds(), { padding: [50, 50] });
+          if (coordPanel) coordPanel.classList.add('panel-right');
 
           const popupContent = `
             <div style="text-align: center;">

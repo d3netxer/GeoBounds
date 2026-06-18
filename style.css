@@ -82,7 +82,8 @@ body {
 .glass-panel {
   position: absolute;
   bottom: 2rem;
-  right: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
   background: var(--panel-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -90,11 +91,17 @@ body {
   border-radius: 12px;
   padding: 1.5rem;
   width: 90%;
-  max-width: 450px;
+  max-width: 500px;
   z-index: 1000;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-  animation: slideUpRight 0.5s ease-out;
+  transition: all 0.5s ease;
+  animation: slideUp 0.5s ease-out;
+}
+
+.panel-right {
+  left: auto !important;
+  right: 2rem !important;
+  transform: none !important;
 }
 
 .glass-panel:hover {
@@ -199,15 +206,15 @@ body {
   box-shadow: 0 0 12px var(--glow-color);
 }
 
-@keyframes slideUpRight {
+@keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translate(-50%, 20px);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate(-50%, 0);
   }
 }
 
