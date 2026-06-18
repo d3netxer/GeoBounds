@@ -245,11 +245,14 @@ async function handleSearch() {
   searchBtn.disabled = true;
 
   try {
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&polygon_geojson=1&limit=1`);
+    // Fetch up to 5 results so we can prioritize polygons
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&polygon_geojson=1&limit=5`);
     const data = await response.json();
 
     if (data && data.length > 0) {
-      const result = data[0];
+      // Find the first result that is actually a Polygon or MultiPolygon, fallback to the first result
+      const polygonResult = data.find(item => item.geojson && (item.geojson.type === 'Polygon' || item.geojson.type === 'MultiPolygon'));
+      const result = polygonResult || data[0];
       
       if (searchPolygonLayer) {
         map.removeLayer(searchPolygonLayer);
