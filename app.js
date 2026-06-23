@@ -42,123 +42,167 @@ const baseMaps = {
   "Satellite": esriSatellite
 };
 
-// Add layer control to top right
 L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
-// Set up the Leaflet Draw Control
-const drawnItems = new L.FeatureGroup();
-map.addLayer(drawnItems);
-
-const drawControl = new L.Control.Draw({
-  position: 'topleft',
-  edit: {
-    featureGroup: drawnItems,
-    remove: true
-  },
-  draw: {
-    // Only enable rectangle drawing for bounding box
-    rectangle: {
-      shapeOptions: {
-        color: '#3fb950',
-        weight: 2,
-        fillColor: '#3fb950',
-        fillOpacity: 0.1
+// Set up Terra Draw
+const draw = new TerraDraw({
+  adapter: new TerraDrawLeafletAdapter({
+    lib: L,
+    map: map,
+  }),
+  modes: [
+    new TerraDrawSelectMode({
+      flags: {
+        polygon: { feature: { draggable: true }, coordinates: { midpoints: true, draggable: true, deletable: true } },
+        rectangle: { feature: { draggable: true }, coordinates: { draggable: true } },
+        linestring: { feature: { draggable: true }, coordinates: { midpoints: true, draggable: true, deletable: true } },
+        point: { feature: { draggable: true } }
       }
-    },
-    polygon: false,
-    polyline: false,
-    circle: false,
-    marker: false,
-    circlemarker: false
-  }
+    }),
+    new TerraDrawPolygonMode(),
+    new TerraDrawRectangleMode(),
+    new TerraDrawLineStringMode(),
+    new TerraDrawPointMode()
+  ]
 });
-map.addControl(drawControl);
+
+draw.start();
+draw.setMode('select');
+
+// Toolbar logic
+document.querySelectorAll('.tool-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.id === 'clear-map-btn') {
+      draw.clear();
+      updateCoordinatesPanel();
+      return;
+    }
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    draw.setMode(btn.dataset.mode);
+  });
+});
+
+// Terra Draw Events
+draw.on('change', () => {
+  updateCoordinatesPanel();
+});
+draw.on('finish', () => {
+  draw.setMode('select');
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.tool-btn[data-mode="select"]').classList.add('active');
+  updateCoordinatesPanel();
+});
 
 // UI Elements
 const coordPanel = document.getElementById('coordinates-panel');
 const coordPlaceholder = document.getElementById('coord-placeholder');
 const coordOutput = document.getElementById('coord-output');
+const formatSelect = document.getElementById('format-select');
+const bboxOutput = document.getElementById('bbox-output');
+const textOutput = document.getElementById('text-output');
+const geometryText = document.getElementById('geometry-text');
+const copyTextBtn = document.getElementById('copy-text-btn');
+
 const minXEl = document.getElementById('min-x');
 const minYEl = document.getElementById('min-y');
 const maxXEl = document.getElementById('max-x');
 const maxYEl = document.getElementById('max-y');
-const copyBtn = document.getElementById('copy-btn');
 
-let currentLayer = null;
+formatSelect.addEventListener('change', updateCoordinatesPanel);
 
-// Handle drawn item
-map.on(L.Draw.Event.CREATED, function (e) {
-  const type = e.layerType;
-  const layer = e.layer;
-
-  if (type === 'rectangle') {
-    // Clear previous boxes
-    drawnItems.clearLayers();
-
-    // Add the new valid box
-    drawnItems.addLayer(layer);
-    currentLayer = layer;
-    updateCoordinatesPanel(layer.getBounds());
-  }
-});
-
-// Handle edit events to update coordinates
-map.on(L.Draw.Event.EDITED, function (e) {
-  const layers = e.layers;
-  layers.eachLayer(function (layer) {
-    if (layer === currentLayer) {
-      updateCoordinatesPanel(layer.getBounds());
-    }
+function calculateBounds(features) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let hasCoords = false;
+  
+  features.forEach(f => {
+    const coords = f.geometry.coordinates;
+    const extract = (c) => {
+      if (typeof c[0] === 'number') {
+        if (c[0] < minX) minX = c[0];
+        if (c[0] > maxX) maxX = c[0];
+        if (c[1] < minY) minY = c[1];
+        if (c[1] > maxY) maxY = c[1];
+        hasCoords = true;
+      } else {
+        c.forEach(extract);
+      }
+    };
+    extract(coords);
   });
-});
+  
+  return hasCoords ? { minX, minY, maxX, maxY } : null;
+}
 
-// Update coordinates live while editing without needing to click save
-map.on('draw:editvertex draw:editmove draw:editresize', function (e) {
-  if (currentLayer) {
-    updateCoordinatesPanel(currentLayer.getBounds());
-  }
-});
+function geojsonToWkt(geometry) {
+  const type = geometry.type.toUpperCase();
+  const coords = geometry.coordinates;
+  
+  const joinCoords = (c) => {
+    if (typeof c[0] === 'number') return `${c[0]} ${c[1]}`;
+    return `(${c.map(joinCoords).join(', ')})`;
+  };
+  
+  let wktCoords = joinCoords(coords);
+  if (type === 'POINT') return `POINT(${coords[0]} ${coords[1]})`;
+  if (type === 'LINESTRING') return `LINESTRING${wktCoords}`;
+  if (type === 'POLYGON') return `POLYGON${wktCoords}`;
+  return `${type}${wktCoords}`;
+}
 
-// Handle deletion
-map.on(L.Draw.Event.DELETED, function (e) {
-  if (drawnItems.getLayers().length === 0) {
-    currentLayer = null;
+function updateCoordinatesPanel() {
+  const snapshot = draw.getSnapshot();
+  
+  if (!snapshot || snapshot.length === 0) {
     coordPlaceholder.style.display = 'block';
     coordOutput.style.display = 'none';
-
     if (coordPanel && !searchPolygonLayer) {
       coordPanel.classList.remove('panel-right');
     }
-    
-    minXEl.innerText = '0.0000';
-    minYEl.innerText = '0.0000';
-    maxXEl.innerText = '0.0000';
-    maxYEl.innerText = '0.0000';
-  } else {
-    // If there's still a layer somehow, update it
-    const layers = drawnItems.getLayers();
-    currentLayer = layers[0];
-    updateCoordinatesPanel(currentLayer.getBounds());
+    return;
   }
-});
-
-function updateCoordinatesPanel(bounds) {
+  
   if (coordPanel) coordPanel.classList.add('panel-right');
-
   coordPlaceholder.style.display = 'none';
   coordOutput.style.display = 'block';
 
-  const sw = bounds.getSouthWest();
-  const ne = bounds.getNorthEast();
+  const selectedFormat = formatSelect.value;
+  
+  if (selectedFormat === 'bbox') {
+    bboxOutput.style.display = 'block';
+    textOutput.style.display = 'none';
+    
+    const bounds = calculateBounds(snapshot);
+    if (bounds) {
+      minXEl.innerText = bounds.minX.toFixed(4);
+      minYEl.innerText = bounds.minY.toFixed(4);
+      maxXEl.innerText = bounds.maxX.toFixed(4);
+      maxYEl.innerText = bounds.maxY.toFixed(4);
+    }
+  } else {
+    bboxOutput.style.display = 'none';
+    textOutput.style.display = 'block';
+    
+    let text = '';
+    if (selectedFormat === 'geojson') {
+      text = JSON.stringify({ type: "FeatureCollection", features: snapshot }, null, 2);
+    } else if (selectedFormat === 'wkt') {
+      text = snapshot.map(f => geojsonToWkt(f.geometry)).join('\n');
+    } else if (selectedFormat === 'raw') {
+      text = snapshot.map(f => JSON.stringify(f.geometry.coordinates)).join('\n');
+    }
+    geometryText.value = text;
+  }
+}
 
-  // Format bounds to 4 decimal places for cleanliness
-  const formatCoord = (val) => Number(val).toFixed(4);
-
-  // set values
-  minXEl.innerText = formatCoord(sw.lng);
-  minYEl.innerText = formatCoord(sw.lat);
-  maxXEl.innerText = formatCoord(ne.lng);
-  maxYEl.innerText = formatCoord(ne.lat);
+if (copyTextBtn) {
+  copyTextBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(geometryText.value).then(() => {
+      const orig = copyTextBtn.innerText;
+      copyTextBtn.innerText = 'Copied!';
+      setTimeout(() => { copyTextBtn.innerText = orig; }, 2000);
+    });
+  });
 }
 
 // Handle manual coordinate input
@@ -168,69 +212,61 @@ function handleManualCoordinateInput() {
   const x2 = parseFloat(maxXEl.innerText);
   const y2 = parseFloat(maxYEl.innerText);
 
-  // Validate numbers
   if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) return;
 
-  // Ensure bounds are always valid regardless of input order
   const minLat = Math.min(y1, y2);
   const maxLat = Math.max(y1, y2);
   const minLng = Math.min(x1, x2);
   const maxLng = Math.max(x1, x2);
 
-  const bounds = L.latLngBounds([minLat, minLng], [maxLat, maxLng]);
-
-  if (!currentLayer) {
-    // Create new layer if none exists
-    currentLayer = L.rectangle(bounds, {
-      color: '#3fb950',
-      weight: 2,
-      fillColor: '#3fb950',
-      fillOpacity: 0.1
-    });
-    drawnItems.addLayer(currentLayer);
-  } else {
-    // Update existing layer
-    currentLayer.setBounds(bounds);
-  }
+  draw.clear();
+  draw.addFeatures([{
+    type: "Feature",
+    properties: { mode: "rectangle" },
+    geometry: {
+      type: "Polygon",
+      coordinates: [[
+        [minLng, minLat],
+        [minLng, maxLat],
+        [maxLng, maxLat],
+        [maxLng, minLat],
+        [minLng, minLat]
+      ]]
+    }
+  }]);
 }
 
-// Attach event listeners for real-time input
 [minXEl, minYEl, maxXEl, maxYEl].forEach(el => {
-  el.addEventListener('input', handleManualCoordinateInput);
-  
-  // Prevent multiline from Enter key
-  el.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      el.blur();
-    }
-  });
-
-  // Handle pasting all 4 coordinates at once
-  el.addEventListener('paste', (e) => {
-    let paste = (e.clipboardData || window.clipboardData).getData('text');
-    let numbers = paste.match(/-?\d+(\.\d+)?/g);
+  if (el) {
+    el.addEventListener('input', handleManualCoordinateInput);
     
-    if (numbers && numbers.length >= 4) {
-      e.preventDefault(); // Stop normal paste
-      minXEl.innerText = numbers[0];
-      minYEl.innerText = numbers[1];
-      maxXEl.innerText = numbers[2];
-      maxYEl.innerText = numbers[3];
-      
-      handleManualCoordinateInput();
-      
-      // Auto-center map on the new pasted bounds with extra padding so the UI doesn't cover it
-      if (currentLayer) {
-        map.fitBounds(currentLayer.getBounds(), { 
-          paddingTopLeft: [50, 50], 
-          paddingBottomRight: [50, 250] 
-        });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        el.blur();
       }
+    });
+
+    el.addEventListener('paste', (e) => {
+      let paste = (e.clipboardData || window.clipboardData).getData('text');
+      let numbers = paste.match(/-?\d+(\.\d+)?/g);
       
-      el.blur();
-    }
-  });
+      if (numbers && numbers.length >= 4) {
+        e.preventDefault();
+        minXEl.innerText = numbers[0];
+        minYEl.innerText = numbers[1];
+        maxXEl.innerText = numbers[2];
+        maxYEl.innerText = numbers[3];
+        
+        handleManualCoordinateInput();
+        
+        const bounds = L.latLngBounds([parseFloat(numbers[1]), parseFloat(numbers[0])], [parseFloat(numbers[3]), parseFloat(numbers[2])]);
+        map.fitBounds(bounds, { paddingTopLeft: [50, 50], paddingBottomRight: [50, 250] });
+        
+        el.blur();
+      }
+    });
+  }
 });
 
 // Search functionality
@@ -246,27 +282,18 @@ async function handleSearch() {
   searchBtn.disabled = true;
 
   try {
-    // Fetch up to 5 results so we can prioritize polygons. Use polygon_threshold to simplify geometry and massively speed up the request.
     const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&polygon_geojson=1&polygon_threshold=0.005&limit=5`);
     const data = await response.json();
 
     if (data && data.length > 0) {
-      // Find the first result that is actually a Polygon or MultiPolygon, fallback to the first result
       const polygonResult = data.find(item => item.geojson && (item.geojson.type === 'Polygon' || item.geojson.type === 'MultiPolygon'));
       const result = polygonResult || data[0];
       
-      if (searchPolygonLayer) {
-        map.removeLayer(searchPolygonLayer);
-      }
+      if (searchPolygonLayer) map.removeLayer(searchPolygonLayer);
 
       if (result.geojson) {
         searchPolygonLayer = L.geoJSON(result.geojson, {
-          style: {
-            color: '#0969da',
-            weight: 2,
-            fillColor: '#0969da',
-            fillOpacity: 0.1
-          }
+          style: { color: '#0969da', weight: 2, fillColor: '#0969da', fillOpacity: 0.1 }
         }).addTo(map);
 
         map.fitBounds(searchPolygonLayer.getBounds(), { padding: [50, 50] });
@@ -287,11 +314,10 @@ async function handleSearch() {
         alert('No exact polygon found, but zoomed to general location.');
       }
     } else {
-      alert('Location not found. Try a different search.');
+      alert('Location not found.');
     }
   } catch (err) {
     console.error('Search error:', err);
-    alert('An error occurred while searching.');
   } finally {
     searchBtn.innerText = 'Search';
     searchBtn.disabled = false;
@@ -307,29 +333,33 @@ map.on('popupopen', function(e) {
   const createBtn = document.getElementById('popup-create-bbox');
   if (createBtn && searchPolygonLayer) {
     createBtn.onclick = function() {
-      createBoundingBoxFromLayer(searchPolygonLayer);
+      const bounds = searchPolygonLayer.getBounds();
+      const minLat = bounds.getSouth(), maxLat = bounds.getNorth();
+      const minLng = bounds.getWest(), maxLng = bounds.getEast();
+      
+      draw.clear();
+      draw.addFeatures([{
+        type: "Feature",
+        properties: { mode: "rectangle" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            [minLng, minLat],
+            [minLng, maxLat],
+            [maxLng, maxLat],
+            [maxLng, minLat],
+            [minLng, minLat]
+          ]]
+        }
+      }]);
+      
+      map.removeLayer(searchPolygonLayer);
+      searchPolygonLayer = null;
       map.closePopup();
+      updateCoordinatesPanel();
     };
   }
 });
-
-function createBoundingBoxFromLayer(layer) {
-  const bounds = layer.getBounds();
-  
-  if (!currentLayer) {
-    currentLayer = L.rectangle(bounds, {
-      color: '#3fb950',
-      weight: 2,
-      fillColor: '#3fb950',
-      fillOpacity: 0.1
-    });
-    drawnItems.addLayer(currentLayer);
-  } else {
-    currentLayer.setBounds(bounds);
-  }
-  
-  updateCoordinatesPanel(bounds);
-}
 
 // GeoJSON Drag and Drop
 const mapContainerEl = document.getElementById('map-container');
@@ -341,7 +371,6 @@ mapContainerEl.addEventListener('dragover', (e) => {
 
 mapContainerEl.addEventListener('dragleave', (e) => {
   e.preventDefault();
-  // Prevent flickering when dragging over child elements
   if (!e.currentTarget.contains(e.relatedTarget)) {
     mapContainerEl.classList.remove('drag-over');
   }
@@ -360,33 +389,38 @@ mapContainerEl.addEventListener('drop', (e) => {
         try {
           const geojsonData = JSON.parse(event.target.result);
           
-          if (searchPolygonLayer) {
-            map.removeLayer(searchPolygonLayer);
+          let features = [];
+          if (geojsonData.type === "FeatureCollection") {
+            features = geojsonData.features;
+          } else if (geojsonData.type === "Feature") {
+            features = [geojsonData];
+          } else if (geojsonData.type === "Polygon" || geojsonData.type === "LineString" || geojsonData.type === "Point") {
+             features = [{
+                 type: "Feature",
+                 geometry: geojsonData,
+                 properties: {}
+             }];
+          }
+          
+          features = features.map(f => {
+            f.properties = f.properties || {};
+            if (f.geometry.type.includes("Polygon")) f.properties.mode = "polygon";
+            else if (f.geometry.type.includes("Line")) f.properties.mode = "linestring";
+            else f.properties.mode = "point";
+            return f;
+          });
+
+          draw.clear();
+          draw.addFeatures(features);
+          
+          const bounds = calculateBounds(features);
+          if (bounds) {
+             map.fitBounds(L.latLngBounds([bounds.minY, bounds.minX], [bounds.maxY, bounds.maxX]), { padding: [50, 50] });
           }
 
-          searchPolygonLayer = L.geoJSON(geojsonData, {
-            style: {
-              color: '#0969da',
-              weight: 2,
-              fillColor: '#0969da',
-              fillOpacity: 0.1
-            }
-          }).addTo(map);
-
-          map.fitBounds(searchPolygonLayer.getBounds(), { padding: [50, 50] });
-          if (coordPanel) coordPanel.classList.add('panel-right');
-
-          const popupContent = `
-            <div style="text-align: center;">
-              <strong>${file.name}</strong><br>
-              <button id="popup-create-bbox" class="popup-btn">Create Bounding Box</button>
-            </div>
-          `;
-          searchPolygonLayer.bindPopup(popupContent).openPopup();
-          
         } catch (err) {
           console.error('Invalid GeoJSON', err);
-          alert('Could not parse GeoJSON file. Ensure it is valid JSON.');
+          alert('Could not parse GeoJSON file.');
         }
       };
       reader.readAsText(file);
@@ -395,5 +429,3 @@ mapContainerEl.addEventListener('drop', (e) => {
     }
   }
 });
-
-

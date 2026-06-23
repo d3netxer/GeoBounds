@@ -230,9 +230,33 @@ body {
   background-color: rgba(230, 230, 230, 0.8) !important;
 }
 
-.leaflet-draw-toolbar a {
-  background-color: var(--panel-bg) !important;
-  border-color: var(--border-color) !important;
+/* Custom Terra Draw Toolbar */
+.tool-btn {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.tool-btn:hover {
+  background: #f0f0f0;
+  transform: scale(1.05);
+}
+
+.tool-btn.active {
+  background: var(--primary-accent);
+  color: white;
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 10px var(--glow-color);
 }
 
 .leaflet-control-attribution {

@@ -27,9 +27,10 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <!-- Leaflet Draw -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <!-- Terra Draw Core -->
+  <script src="https://unpkg.com/terra-draw@1.6.1/dist/terra-draw.umd.js"></script>
+  <!-- Terra Draw Leaflet Adapter -->
+  <script src="https://unpkg.com/terra-draw-leaflet-adapter@1.0.3/dist/terra-draw-leaflet-adapter.umd.js"></script>
 
   <link rel="stylesheet" href="style.css?v=2">
 </head>
@@ -44,20 +45,43 @@
     <div id="map-container">
       <div id="map"></div>
 
+      <div id="terra-toolbar" class="glass-panel" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem; width: auto; max-width: none; z-index: 1000; bottom: auto;">
+        <button class="tool-btn active" data-mode="select" title="Select/Edit">↖</button>
+        <button class="tool-btn" data-mode="polygon" title="Draw Polygon">⬡</button>
+        <button class="tool-btn" data-mode="rectangle" title="Draw Rectangle">▱</button>
+        <button class="tool-btn" data-mode="linestring" title="Draw Line">〰</button>
+        <button class="tool-btn" data-mode="point" title="Draw Point">📍</button>
+        <button class="tool-btn" id="clear-map-btn" title="Clear Map">🗑</button>
+      </div>
+
       <div id="search-panel" class="glass-panel search-panel">
         <input type="text" id="search-input" placeholder="Search for a place...">
         <button id="search-btn" class="glow-btn">Search</button>
       </div>
 
       <div id="coordinates-panel" class="glass-panel">
-        <div class="panel-header">
-          <h3>Bounding Box Output</h3>
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+          <h3>Geometry Output</h3>
+          <select id="format-select" class="glow-select" style="background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border-color); padding: 0.25rem 0.5rem; border-radius: 4px; outline: none; cursor: pointer;">
+            <option value="bbox">Bounding Box</option>
+            <option value="geojson">GeoJSON</option>
+            <option value="wkt">WKT</option>
+            <option value="raw">Raw Arrays</option>
+          </select>
         </div>
         <div class="panel-content">
           <p class="placeholder-text" id="coord-placeholder">Draw on the map or type coordinates below.</p>
           <div class="coord-output" id="coord-output">
-            <p class="format-label">Format: (xmin, ymin, xmax, ymax) / (lon_min, lat_min, lon_max, lat_max)</p>
-            <code><span id="min-x" contenteditable="true">0.0</span>, <span id="min-y" contenteditable="true">0.0</span>, <span id="max-x" contenteditable="true">0.0</span>, <span id="max-y" contenteditable="true">0.0</span></code>
+            <div id="bbox-output">
+              <p class="format-label">Format: (xmin, ymin, xmax, ymax) / (lon_min, lat_min, lon_max, lat_max)</p>
+              <code><span id="min-x" contenteditable="true">0.0</span>, <span id="min-y" contenteditable="true">0.0</span>, <span id="max-x" contenteditable="true">0.0</span>, <span id="max-y" contenteditable="true">0.0</span></code>
+            </div>
+            <div id="text-output" style="display: none; width: 100%;">
+              <textarea id="geometry-text" rows="5" style="width: 100%; border-radius: 6px; padding: 0.5rem; background: rgba(0, 0, 0, 0.2); color: var(--text-color); border: 1px solid var(--border-color); font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; resize: vertical;" readonly></textarea>
+              <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+                <button id="copy-text-btn" class="glow-btn">Copy Output</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
