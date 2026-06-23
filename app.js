@@ -45,6 +45,8 @@ const baseMaps = {
 L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
 // Set up Terra Draw
+const { TerraDraw, TerraDrawSelectMode, TerraDrawPointMode, TerraDrawLineStringMode, TerraDrawPolygonMode, TerraDrawRectangleMode } = window.terraDraw;
+const { TerraDrawLeafletAdapter } = window.terraDrawLeafletAdapter;
 const draw = new TerraDraw({
   adapter: new TerraDrawLeafletAdapter({
     lib: L,
