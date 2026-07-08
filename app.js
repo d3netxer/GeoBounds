@@ -170,6 +170,79 @@ window.showLimitToast = function() {
   window.showToast("Maximum limit of 3 shapes reached", "#ff9f0a");
 };
 
+// Drag and drop sorting logic
+window.geometryOrder = [];
+
+function initDragAndDrop() {
+  const wrapper = document.getElementById('geometry-cards-wrapper');
+  if (wrapper) {
+    wrapper.addEventListener('dragstart', (e) => {
+      const handle = e.target.closest('.drag-handle');
+      if (!handle) {
+        e.preventDefault();
+        return;
+      }
+      const card = handle.closest('.geometry-card');
+      if (!card) return;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.id);
+      
+      // Hide the default browser drag ghost image (the confusing blue square)
+      const img = new Image();
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      e.dataTransfer.setDragImage(img, 0, 0);
+    });
+
+    wrapper.addEventListener('dragend', (e) => {
+      const card = e.target.closest('.geometry-card');
+      if (card) {
+        card.classList.remove('dragging');
+      }
+      const cards = Array.from(wrapper.querySelectorAll('.geometry-card'));
+      window.geometryOrder = cards
+        .map(c => c.id.replace('card-', ''))
+        .filter(id => id && id !== 'placeholder-card');
+      
+      // Update coordinates panel to reflect the sorted state
+      updateCoordinatesPanel();
+    });
+
+    wrapper.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const draggingCard = wrapper.querySelector('.dragging');
+      if (!draggingCard) return;
+
+      const afterElement = getDragAfterElement(wrapper, e.clientY);
+      if (afterElement == null) {
+        wrapper.appendChild(draggingCard);
+      } else {
+        wrapper.insertBefore(draggingCard, afterElement);
+      }
+    });
+  }
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.geometry-card:not(.dragging):not(.placeholder-card)')];
+
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDragAndDrop);
+} else {
+  initDragAndDrop();
+}
+
 // Toolbar logic
 document.querySelectorAll('.tool-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -337,11 +410,16 @@ window.updateFeatureName = function(id, name) {
     feature.properties = feature.properties || {};
     feature.properties.name = name;
     try {
+      window.isUpdatingProgrammatically = true;
       draw.removeFeatures([id]);
       draw.addFeatures([feature]);
       draw.setMode('select');
       draw.selectFeature(id);
-    } catch(e) {}
+      window.isUpdatingProgrammatically = false;
+    } catch(e) {
+      window.isUpdatingProgrammatically = false;
+    }
+    updateCoordinatesPanel();
   }
 };
 
@@ -582,6 +660,24 @@ window.changeFormat = function(id, selectElement) {
 function updateCoordinatesPanel() {
   const snapshot = getActiveShapes();
   
+  // Sort snapshot according to geometryOrder if custom order exists
+  if (window.geometryOrder && window.geometryOrder.length > 0) {
+    const activeIds = snapshot.map(f => f.id);
+    window.geometryOrder = window.geometryOrder.filter(id => activeIds.includes(id));
+    
+    snapshot.forEach(f => {
+      if (!window.geometryOrder.includes(f.id)) {
+        window.geometryOrder.push(f.id);
+      }
+    });
+    
+    snapshot.sort((a, b) => {
+      return window.geometryOrder.indexOf(a.id) - window.geometryOrder.indexOf(b.id);
+    });
+  } else {
+    window.geometryOrder = snapshot.map(f => f.id);
+  }
+  
   // Visually disable drawing tools if limit is reached
   const atLimit = snapshot.length >= 3;
   document.querySelectorAll('.tool-btn').forEach(btn => {
@@ -721,6 +817,7 @@ function updateCoordinatesPanel() {
         <div class="glass-panel geometry-card ${existingCard ? '' : 'new-card'}" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div class="drag-handle" draggable="true" title="Drag to reorder">⋮⋮</div>
               ${iconHtml}
               <input class="title-input" type="text" value="${feature.properties.name || `${type} ${index + 1}`}" style="margin: 0; text-transform: capitalize; background: transparent; border: 1px solid transparent; color: var(--text-color); font-size: 1rem; font-weight: bold; outline: none; padding: 2px 4px; border-radius: 4px; transition: border-color 0.2s; width: 130px;" onchange="updateFeatureName('${feature.id}', this.value)" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
             </div>

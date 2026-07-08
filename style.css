@@ -443,3 +443,27 @@ body {
 .icon-btn.delete:hover {
   color: #ff4444;
 }
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.drag-handle:hover {
+  color: var(--text-color);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+body:has(.dragging),
+body:has(.dragging) * {
+  cursor: grabbing !important;
+}
