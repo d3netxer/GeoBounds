@@ -466,4 +466,6 @@ body {
 body:has(.dragging),
 body:has(.dragging) * {
   cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }

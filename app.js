@@ -173,19 +173,19 @@ window.showLimitToast = function() {
 // Drag and drop sorting logic
 window.geometryOrder = [];
 
-let dragGhost = null;
+let dragGhostCanvas = null;
 
 function initDragAndDrop() {
   const wrapper = document.getElementById('geometry-cards-wrapper');
   if (wrapper) {
-    // Create the dummy element for hiding drag ghost
-    dragGhost = document.createElement('div');
-    dragGhost.style.width = '1px';
-    dragGhost.style.height = '1px';
-    dragGhost.style.opacity = '0';
-    dragGhost.style.position = 'absolute';
-    dragGhost.style.left = '-999px';
-    document.body.appendChild(dragGhost);
+    // Create a 1x1 transparent canvas as drag image (immune to Brave shields & synchronous)
+    dragGhostCanvas = document.createElement('canvas');
+    dragGhostCanvas.width = 1;
+    dragGhostCanvas.height = 1;
+    const ctx = dragGhostCanvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 1, 1);
+    }
 
     wrapper.addEventListener('dragstart', (e) => {
       const handle = e.target.closest('.drag-handle');
@@ -196,12 +196,19 @@ function initDragAndDrop() {
       const card = handle.closest('.geometry-card');
       if (!card) return;
       card.classList.add('dragging');
+      
+      // Clear selections and blur inputs to prevent focus blue rectangles
+      window.getSelection().removeAllRanges();
+      if (document.activeElement) {
+        document.activeElement.blur();
+      }
+
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', card.id);
       
-      // Hide the default browser drag ghost image synchronously (works in Safari & Chrome)
-      if (dragGhost) {
-        e.dataTransfer.setDragImage(dragGhost, 0, 0);
+      // Hide the default browser drag ghost image
+      if (dragGhostCanvas) {
+        e.dataTransfer.setDragImage(dragGhostCanvas, 0, 0);
       }
     });
 
