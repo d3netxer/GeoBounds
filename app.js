@@ -173,9 +173,20 @@ window.showLimitToast = function() {
 // Drag and drop sorting logic
 window.geometryOrder = [];
 
+let dragGhost = null;
+
 function initDragAndDrop() {
   const wrapper = document.getElementById('geometry-cards-wrapper');
   if (wrapper) {
+    // Create the dummy element for hiding drag ghost
+    dragGhost = document.createElement('div');
+    dragGhost.style.width = '1px';
+    dragGhost.style.height = '1px';
+    dragGhost.style.opacity = '0';
+    dragGhost.style.position = 'absolute';
+    dragGhost.style.left = '-999px';
+    document.body.appendChild(dragGhost);
+
     wrapper.addEventListener('dragstart', (e) => {
       const handle = e.target.closest('.drag-handle');
       if (!handle) {
@@ -188,10 +199,10 @@ function initDragAndDrop() {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', card.id);
       
-      // Hide the default browser drag ghost image (the confusing blue square)
-      const img = new Image();
-      img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-      e.dataTransfer.setDragImage(img, 0, 0);
+      // Hide the default browser drag ghost image synchronously (works in Safari & Chrome)
+      if (dragGhost) {
+        e.dataTransfer.setDragImage(dragGhost, 0, 0);
+      }
     });
 
     wrapper.addEventListener('dragend', (e) => {
