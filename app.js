@@ -326,15 +326,23 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
   });
 });
 
-// Terra Draw Events
+// Terra Draw Events (debounced to prevent flickering)
+let updatePanelTimer = null;
+function debouncedUpdatePanel() {
+  if (updatePanelTimer) cancelAnimationFrame(updatePanelTimer);
+  updatePanelTimer = requestAnimationFrame(() => {
+    updateCoordinatesPanel();
+  });
+}
+
 draw.on('change', () => {
   if (window.isUpdatingProgrammatically) return;
-  updateCoordinatesPanel();
+  debouncedUpdatePanel();
 });
 
 draw.on('deselect', () => {
   if (window.isUpdatingProgrammatically) return;
-  updateCoordinatesPanel();
+  debouncedUpdatePanel();
 });
 draw.on('finish', (eventId) => {
   setTimeout(() => {
@@ -864,8 +872,7 @@ function updateCoordinatesPanel() {
         `;
       }
       
-      const cardHtml = `
-        <div class="glass-panel geometry-card ${existingCard ? '' : 'new-card'}" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">
+      const cardInnerHtml = `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
               <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
@@ -886,12 +893,14 @@ function updateCoordinatesPanel() {
             </div>
           </div>
           ${contentHtml}
-        </div>
       `;
       
       if (existingCard) {
-        existingCard.outerHTML = cardHtml;
+        // Update in-place without destroying the element — prevents flicker
+        existingCard.dataset.format = selectedFormat;
+        existingCard.innerHTML = cardInnerHtml;
       } else {
+        const cardHtml = `<div class="glass-panel geometry-card new-card" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">${cardInnerHtml}</div>`;
         geometryCardsWrapper.insertAdjacentHTML('beforeend', cardHtml);
       }
     }
