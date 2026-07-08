@@ -170,89 +170,122 @@ window.showLimitToast = function() {
   window.showToast("Maximum limit of 3 shapes reached", "#ff9f0a");
 };
 
-// Drag and drop sorting logic
+// Drag and drop sorting logic (custom mouse events — no browser ghost image)
 window.geometryOrder = [];
 
-let dragGhostCanvas = null;
+let dragState = null; // { card, wrapper, startY, placeholder }
 
 function initDragAndDrop() {
   const wrapper = document.getElementById('geometry-cards-wrapper');
-  if (wrapper) {
-    // Create a 1x1 transparent canvas as drag image (immune to Brave shields & synchronous)
-    dragGhostCanvas = document.createElement('canvas');
-    dragGhostCanvas.width = 1;
-    dragGhostCanvas.height = 1;
-    const ctx = dragGhostCanvas.getContext('2d');
-    if (ctx) {
-      ctx.clearRect(0, 0, 1, 1);
+  if (!wrapper) return;
+
+  wrapper.addEventListener('mousedown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    const card = handle.closest('.geometry-card');
+    if (!card) return;
+
+    e.preventDefault();
+    window.getSelection().removeAllRanges();
+    if (document.activeElement) document.activeElement.blur();
+
+    // Create a placeholder to hold the card's space
+    const placeholder = document.createElement('div');
+    placeholder.className = 'drag-placeholder';
+    placeholder.style.height = card.offsetHeight + 'px';
+    placeholder.style.marginBottom = getComputedStyle(card).marginBottom;
+
+    const rect = card.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
+
+    // Position the card as fixed overlay at its current visual position
+    card.classList.add('dragging');
+    card.style.position = 'fixed';
+    card.style.top = rect.top + 'px';
+    card.style.left = rect.left + 'px';
+    card.style.width = rect.width + 'px';
+    card.style.zIndex = '9999';
+    card.style.pointerEvents = 'none';
+
+    // Insert placeholder where the card was
+    card.parentNode.insertBefore(placeholder, card);
+
+    dragState = {
+      card,
+      wrapper,
+      placeholder,
+      offsetY: e.clientY - rect.top,
+      startY: e.clientY
+    };
+
+    document.body.classList.add('is-dragging');
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragState) return;
+    e.preventDefault();
+
+    const { card, wrapper, placeholder, offsetY } = dragState;
+
+    // Move the card with the cursor
+    card.style.top = (e.clientY - offsetY) + 'px';
+
+    // Find the element we should insert the placeholder before
+    const siblings = [...wrapper.querySelectorAll('.geometry-card:not(.dragging):not(.placeholder-card)')];
+    let insertBefore = null;
+
+    for (const sibling of siblings) {
+      const box = sibling.getBoundingClientRect();
+      if (e.clientY < box.top + box.height / 2) {
+        insertBefore = sibling;
+        break;
+      }
     }
 
-    wrapper.addEventListener('dragstart', (e) => {
-      const handle = e.target.closest('.drag-handle');
-      if (!handle) {
-        e.preventDefault();
-        return;
-      }
-      const card = handle.closest('.geometry-card');
-      if (!card) return;
-      card.classList.add('dragging');
-      
-      // Clear selections and blur inputs to prevent focus blue rectangles
-      window.getSelection().removeAllRanges();
-      if (document.activeElement) {
-        document.activeElement.blur();
-      }
-
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', card.id);
-      
-      // Hide the default browser drag ghost image
-      if (dragGhostCanvas) {
-        e.dataTransfer.setDragImage(dragGhostCanvas, 0, 0);
-      }
-    });
-
-    wrapper.addEventListener('dragend', (e) => {
-      const card = e.target.closest('.geometry-card');
-      if (card) {
-        card.classList.remove('dragging');
-      }
-      const cards = Array.from(wrapper.querySelectorAll('.geometry-card'));
-      window.geometryOrder = cards
-        .map(c => c.id.replace('card-', ''))
-        .filter(id => id && id !== 'placeholder-card');
-      
-      // Update coordinates panel to reflect the sorted state
-      updateCoordinatesPanel();
-    });
-
-    wrapper.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      const draggingCard = wrapper.querySelector('.dragging');
-      if (!draggingCard) return;
-
-      const afterElement = getDragAfterElement(wrapper, e.clientY);
-      if (afterElement == null) {
-        wrapper.appendChild(draggingCard);
-      } else {
-        wrapper.insertBefore(draggingCard, afterElement);
-      }
-    });
-  }
-}
-
-function getDragAfterElement(container, y) {
-  const draggableElements = [...container.querySelectorAll('.geometry-card:not(.dragging):not(.placeholder-card)')];
-
-  return draggableElements.reduce((closest, child) => {
-    const box = child.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closest.offset) {
-      return { offset: offset, element: child };
+    if (insertBefore) {
+      wrapper.insertBefore(placeholder, insertBefore);
     } else {
-      return closest;
+      // Append after all cards (but before the dragging card element)
+      const lastSibling = siblings[siblings.length - 1];
+      if (lastSibling && lastSibling.nextSibling !== placeholder) {
+        if (lastSibling.nextSibling) {
+          wrapper.insertBefore(placeholder, lastSibling.nextSibling);
+        } else {
+          wrapper.appendChild(placeholder);
+        }
+      }
     }
-  }, { offset: Number.NEGATIVE_INFINITY }).element;
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (!dragState) return;
+
+    const { card, wrapper, placeholder } = dragState;
+
+    // Drop the card into the placeholder's position
+    wrapper.insertBefore(card, placeholder);
+    placeholder.remove();
+
+    // Reset card styles
+    card.classList.remove('dragging');
+    card.style.position = '';
+    card.style.top = '';
+    card.style.left = '';
+    card.style.width = '';
+    card.style.zIndex = '';
+    card.style.pointerEvents = '';
+
+    document.body.classList.remove('is-dragging');
+
+    // Update order
+    const cards = Array.from(wrapper.querySelectorAll('.geometry-card:not(.placeholder-card)'));
+    window.geometryOrder = cards
+      .map(c => c.id.replace('card-', ''))
+      .filter(id => id);
+
+    dragState = null;
+    updateCoordinatesPanel();
+  });
 }
 
 if (document.readyState === 'loading') {
@@ -835,7 +868,7 @@ function updateCoordinatesPanel() {
         <div class="glass-panel geometry-card ${existingCard ? '' : 'new-card'}" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <div class="drag-handle" draggable="true" title="Drag to reorder">⋮⋮</div>
+              <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
               ${iconHtml}
               <input class="title-input" type="text" value="${feature.properties.name || `${type} ${index + 1}`}" style="margin: 0; text-transform: capitalize; background: transparent; border: 1px solid transparent; color: var(--text-color); font-size: 1rem; font-weight: bold; outline: none; padding: 2px 4px; border-radius: 4px; transition: border-color 0.2s; width: 130px;" onchange="updateFeatureName('${feature.id}', this.value)" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
             </div>
