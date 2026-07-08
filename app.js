@@ -80,7 +80,9 @@ const selectMode = new TerraDrawSelectMode({
     selectedPolygonColor: (f) => f.properties.color || '#4285f4',
     selectedPolygonOutlineColor: (f) => f.properties.color || '#4285f4',
     selectedLineStringColor: (f) => f.properties.color || '#4285f4',
-    selectedPointColor: (f) => f.properties.color || '#4285f4'
+    selectedPointColor: (f) => f.properties.color || '#4285f4',
+    selectedPointOutlineColor: (f) => f.properties.color || '#4285f4',
+    selectedPointOutlineWidth: 3
   }
 });
 
@@ -113,7 +115,8 @@ const draw = new TerraDraw({
     new TerraDrawPointMode({
       styles: {
         pointColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
-        pointOutlineColor: () => '#ffffff'
+        pointOutlineColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
+        pointOutlineWidth: 3
       }
     })
   ]
@@ -266,7 +269,10 @@ function initDragAndDrop() {
     wrapper.insertBefore(card, placeholder);
     placeholder.remove();
 
-    // Reset card styles
+    // Suppress transitions during the drop to prevent flicker
+    // (glass-panel has 'transition: all 0.5s ease' which would animate
+    // opacity/box-shadow changes when .dragging is removed)
+    card.style.transition = 'none';
     card.classList.remove('dragging');
     card.style.position = '';
     card.style.top = '';
@@ -274,6 +280,10 @@ function initDragAndDrop() {
     card.style.width = '';
     card.style.zIndex = '';
     card.style.pointerEvents = '';
+
+    // Force layout recalc then re-enable transitions next frame
+    card.offsetHeight;
+    requestAnimationFrame(() => { card.style.transition = ''; });
 
     document.body.classList.remove('is-dragging');
 
