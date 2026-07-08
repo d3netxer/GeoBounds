@@ -284,7 +284,6 @@ function initDragAndDrop() {
       .filter(id => id);
 
     dragState = null;
-    updateCoordinatesPanel();
   });
 }
 
