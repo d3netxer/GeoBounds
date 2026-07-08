@@ -32,7 +32,7 @@ body {
 }
 
 .app-header {
-  padding: 1.5rem 2rem;
+  padding: 1.125rem 2rem;
   background: linear-gradient(180deg, rgba(246, 248, 250, 1) 0%, rgba(246, 248, 250, 0.8) 100%);
   border-bottom: 1px solid var(--border-color);
   z-index: 10;
@@ -61,6 +61,8 @@ body {
   width: 100%;
 }
 
+/* Removed Leaflet tile gap hack */
+
 #map-container.drag-over::after {
   content: '';
   position: absolute;
@@ -75,7 +77,21 @@ body {
   width: 100%;
   height: 100%;
   z-index: 1;
-  background-color: #e5e7eb;
+  /* Match the dominant tile color of the Carto Light basemap so any
+     sub-pixel rendering gaps between tiles are invisible instead of
+     showing a contrasting background color as "white lines". */
+  background-color: #d3d8dc;
+}
+
+/* Fix Leaflet tile seams on high-DPI / Retina displays (Safari/WebKit).
+   will-change: transform promotes each tile to its own compositing layer,
+   which eliminates sub-pixel anti-aliasing at tile boundaries. */
+.leaflet-tile-container {
+  will-change: transform;
+}
+
+.leaflet-tile {
+  will-change: transform;
 }
 
 /* Glassmorphism coordinates panel */
@@ -281,7 +297,7 @@ body {
   transform: scale(1.6) !important;
   transform-origin: top right !important;
   margin-right: 20px !important;
-  margin-top: 20px !important;
+  margin-top: 130px !important;
 }
 
 .leaflet-draw {
@@ -358,4 +374,72 @@ body {
 
 .popup-btn:hover {
   background: #0550ae;
+}
+
+/* Geometry Card Styles */
+#geometry-output-container .glass-panel {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  transform: none;
+  width: 100%;
+}
+
+.geometry-card {
+  min-width: 420px;
+}
+
+.geometry-card.new-card {
+  animation: slideUp 0.3s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: transform 0.2s, color 0.2s;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  color: var(--text-color);
+  transform: scale(1.1);
+}
+
+.icon-btn:active {
+  transform: scale(0.85);
+}
+
+.icon-btn.pressed {
+  color: var(--primary-accent) !important;
+  transform: scale(0.9);
+  transition: transform 0.1s ease;
+}
+
+.icon-btn.delete:hover {
+  color: #ff4444;
 }

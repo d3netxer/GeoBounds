@@ -32,24 +32,23 @@
   <!-- Terra Draw Leaflet Adapter -->
   <script src="https://unpkg.com/terra-draw-leaflet-adapter@1.0.3/dist/terra-draw-leaflet-adapter.umd.js"></script>
 
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 
 <body>
   <div id="app-container">
     <header class="app-header">
       <h1>GeoBounds</h1>
-      <p>Draw a bounding box to capture coordinates instantly.</p>
+      <p>Draw shapes on the map to capture their coordinates instantly in various formats.</p>
     </header>
 
     <div id="map-container">
       <div id="map"></div>
 
-      <div id="terra-toolbar" class="glass-panel" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem; width: auto; max-width: none; z-index: 1000; bottom: auto;">
-        <button class="tool-btn active" data-mode="select" title="Select/Edit">↖</button>
+      <div id="terra-toolbar" class="glass-panel" style="position: absolute; left: 1rem; top: 1rem; transform: none; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem; width: auto; max-width: none; z-index: 1000; bottom: auto;">
+        <button class="tool-btn" data-mode="rectangle" title="Draw Bounding Box">◻</button>
         <button class="tool-btn" data-mode="polygon" title="Draw Polygon">⬡</button>
-        <button class="tool-btn" data-mode="rectangle" title="Draw Rectangle">▱</button>
-        <button class="tool-btn" data-mode="linestring" title="Draw Line">〰</button>
+        <button class="tool-btn" data-mode="linestring" title="Draw Line">╱</button>
         <button class="tool-btn" data-mode="point" title="Draw Point">📍</button>
         <button class="tool-btn" id="clear-map-btn" title="Clear Map">🗑</button>
       </div>
@@ -59,36 +58,30 @@
         <button id="search-btn" class="glow-btn">Search</button>
       </div>
 
-      <div id="coordinates-panel" class="glass-panel">
-        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-          <h3>Geometry Output</h3>
-          <select id="format-select" class="glow-select" style="background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border-color); padding: 0.25rem 0.5rem; border-radius: 4px; outline: none; cursor: pointer;">
-            <option value="bbox">Bounding Box</option>
-            <option value="geojson">GeoJSON</option>
-            <option value="wkt">WKT</option>
-            <option value="raw">Raw Arrays</option>
-          </select>
-        </div>
-        <div class="panel-content">
-          <p class="placeholder-text" id="coord-placeholder">Draw on the map or type coordinates below.</p>
-          <div class="coord-output" id="coord-output">
-            <div id="bbox-output">
-              <p class="format-label">Format: (xmin, ymin, xmax, ymax) / (lon_min, lat_min, lon_max, lat_max)</p>
-              <code><span id="min-x" contenteditable="true">0.0</span>, <span id="min-y" contenteditable="true">0.0</span>, <span id="max-x" contenteditable="true">0.0</span>, <span id="max-y" contenteditable="true">0.0</span></code>
-            </div>
-            <div id="text-output" style="display: none; width: 100%;">
-              <textarea id="geometry-text" rows="5" style="width: 100%; border-radius: 6px; padding: 0.5rem; background: rgba(0, 0, 0, 0.2); color: var(--text-color); border: 1px solid var(--border-color); font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; resize: vertical;" readonly></textarea>
-              <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
-                <button id="copy-text-btn" class="glow-btn">Copy Output</button>
-              </div>
+      <div id="cursor-tooltip" style="display: none; position: fixed; pointer-events: none; z-index: 9999; background: rgba(0, 0, 0, 0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; white-space: nowrap; transform: translate(15px, 15px);">Click and drag to draw rectangle</div>
+
+
+      <div id="toast-notification" style="display: none; position: absolute; top: 1.5rem; left: 50%; transform: translateX(-50%); z-index: 2000; padding: 0.5rem 1rem; background: rgba(0, 0, 0, 0.75); color: #e5e5ea; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; font-weight: 400; font-size: 0.85rem; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.2); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); pointer-events: none; transition: opacity 0.3s ease;">
+        <span style="color: #ff9f0a; margin-right: 6px;">●</span> Maximum limit of 3 shapes reached
+      </div>
+
+      <div id="geometry-output-container" style="position: absolute; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; justify-content: flex-end; z-index: 1000; max-height: calc(100vh - 2rem); pointer-events: none;">
+        
+        <!-- Individual Geometry Cards will be injected here -->
+        <div id="geometry-cards-wrapper" style="display: flex; flex-direction: column; gap: 0.5rem; pointer-events: auto;">
+          <!-- Placeholder if empty -->
+          <div class="glass-panel geometry-card placeholder-card">
+            <div class="panel-content" style="padding: 1rem;">
+              <p class="placeholder-text" id="coord-placeholder" style="margin: 0;">Draw on the map to see coordinates.</p>
             </div>
           </div>
         </div>
+
       </div>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=1001"></script>
 </body>
 
 </html>
