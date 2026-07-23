@@ -80,7 +80,9 @@ const selectMode = new TerraDrawSelectMode({
     selectedPolygonColor: (f) => f.properties.color || '#4285f4',
     selectedPolygonOutlineColor: (f) => f.properties.color || '#4285f4',
     selectedLineStringColor: (f) => f.properties.color || '#4285f4',
-    selectedPointColor: (f) => f.properties.color || '#4285f4'
+    selectedPointColor: (f) => f.properties.color || '#4285f4',
+    selectedPointOutlineColor: (f) => f.properties.color || '#4285f4',
+    selectedPointOutlineWidth: 3
   }
 });
 
@@ -113,7 +115,8 @@ const draw = new TerraDraw({
     new TerraDrawPointMode({
       styles: {
         pointColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
-        pointOutlineColor: () => '#ffffff'
+        pointOutlineColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
+        pointOutlineWidth: 3
       }
     })
   ]
@@ -170,6 +173,136 @@ window.showLimitToast = function() {
   window.showToast("Maximum limit of 3 shapes reached", "#ff9f0a");
 };
 
+// Drag and drop sorting logic (custom mouse events — no browser ghost image)
+window.geometryOrder = [];
+
+let dragState = null; // { card, wrapper, startY, placeholder }
+
+function initDragAndDrop() {
+  const wrapper = document.getElementById('geometry-cards-wrapper');
+  if (!wrapper) return;
+
+  wrapper.addEventListener('mousedown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    const card = handle.closest('.geometry-card');
+    if (!card) return;
+
+    e.preventDefault();
+    window.getSelection().removeAllRanges();
+    if (document.activeElement) document.activeElement.blur();
+
+    // Create a placeholder to hold the card's space
+    const placeholder = document.createElement('div');
+    placeholder.className = 'drag-placeholder';
+    placeholder.style.height = card.offsetHeight + 'px';
+    placeholder.style.marginBottom = getComputedStyle(card).marginBottom;
+
+    const rect = card.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
+
+    // Position the card as fixed overlay at its current visual position
+    card.classList.add('dragging');
+    card.style.position = 'fixed';
+    card.style.top = rect.top + 'px';
+    card.style.left = rect.left + 'px';
+    card.style.width = rect.width + 'px';
+    card.style.zIndex = '9999';
+    card.style.pointerEvents = 'none';
+
+    // Insert placeholder where the card was
+    card.parentNode.insertBefore(placeholder, card);
+
+    dragState = {
+      card,
+      wrapper,
+      placeholder,
+      offsetY: e.clientY - rect.top,
+      startY: e.clientY
+    };
+
+    document.body.classList.add('is-dragging');
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragState) return;
+    e.preventDefault();
+
+    const { card, wrapper, placeholder, offsetY } = dragState;
+
+    // Move the card with the cursor
+    card.style.top = (e.clientY - offsetY) + 'px';
+
+    // Find the element we should insert the placeholder before
+    const siblings = [...wrapper.querySelectorAll('.geometry-card:not(.dragging):not(.placeholder-card)')];
+    let insertBefore = null;
+
+    for (const sibling of siblings) {
+      const box = sibling.getBoundingClientRect();
+      if (e.clientY < box.top + box.height / 2) {
+        insertBefore = sibling;
+        break;
+      }
+    }
+
+    if (insertBefore) {
+      wrapper.insertBefore(placeholder, insertBefore);
+    } else {
+      // Append after all cards (but before the dragging card element)
+      const lastSibling = siblings[siblings.length - 1];
+      if (lastSibling && lastSibling.nextSibling !== placeholder) {
+        if (lastSibling.nextSibling) {
+          wrapper.insertBefore(placeholder, lastSibling.nextSibling);
+        } else {
+          wrapper.appendChild(placeholder);
+        }
+      }
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (!dragState) return;
+
+    const { card, wrapper, placeholder } = dragState;
+
+    // Drop the card into the placeholder's position
+    wrapper.insertBefore(card, placeholder);
+    placeholder.remove();
+
+    // Suppress transitions during the drop to prevent flicker
+    // (glass-panel has 'transition: all 0.5s ease' which would animate
+    // opacity/box-shadow changes when .dragging is removed)
+    card.style.transition = 'none';
+    card.classList.remove('dragging');
+    card.style.position = '';
+    card.style.top = '';
+    card.style.left = '';
+    card.style.width = '';
+    card.style.zIndex = '';
+    card.style.pointerEvents = '';
+
+    // Force layout recalc then re-enable transitions next frame
+    card.offsetHeight;
+    requestAnimationFrame(() => { card.style.transition = ''; });
+
+    document.body.classList.remove('is-dragging');
+
+    // Update order
+    const cards = Array.from(wrapper.querySelectorAll('.geometry-card:not(.placeholder-card)'));
+    window.geometryOrder = cards
+      .map(c => c.id.replace('card-', ''))
+      .filter(id => id);
+
+    dragState = null;
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDragAndDrop);
+} else {
+  initDragAndDrop();
+}
+
 // Toolbar logic
 document.querySelectorAll('.tool-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -202,15 +335,23 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
   });
 });
 
-// Terra Draw Events
+// Terra Draw Events (debounced to prevent flickering)
+let updatePanelTimer = null;
+function debouncedUpdatePanel() {
+  if (updatePanelTimer) cancelAnimationFrame(updatePanelTimer);
+  updatePanelTimer = requestAnimationFrame(() => {
+    updateCoordinatesPanel();
+  });
+}
+
 draw.on('change', () => {
   if (window.isUpdatingProgrammatically) return;
-  updateCoordinatesPanel();
+  debouncedUpdatePanel();
 });
 
 draw.on('deselect', () => {
   if (window.isUpdatingProgrammatically) return;
-  updateCoordinatesPanel();
+  debouncedUpdatePanel();
 });
 draw.on('finish', (eventId) => {
   setTimeout(() => {
@@ -337,11 +478,16 @@ window.updateFeatureName = function(id, name) {
     feature.properties = feature.properties || {};
     feature.properties.name = name;
     try {
+      window.isUpdatingProgrammatically = true;
       draw.removeFeatures([id]);
       draw.addFeatures([feature]);
       draw.setMode('select');
       draw.selectFeature(id);
-    } catch(e) {}
+      window.isUpdatingProgrammatically = false;
+    } catch(e) {
+      window.isUpdatingProgrammatically = false;
+    }
+    updateCoordinatesPanel();
   }
 };
 
@@ -522,10 +668,20 @@ window.updateBoundingBoxFromInputs = function(id) {
     const inputs = card.querySelectorAll('.bbox-input');
     if (inputs.length !== 4) return;
     
-    const minX = parseFloat(inputs[0].value);
-    const minY = parseFloat(inputs[1].value);
-    const maxX = parseFloat(inputs[2].value);
-    const maxY = parseFloat(inputs[3].value);
+    const format = card.dataset.format;
+    let minX, minY, maxX, maxY;
+
+    if (format === 'bbox_tlbr') {
+      minX = parseFloat(inputs[0].value);
+      maxY = parseFloat(inputs[1].value);
+      maxX = parseFloat(inputs[2].value);
+      minY = parseFloat(inputs[3].value);
+    } else {
+      minX = parseFloat(inputs[0].value);
+      minY = parseFloat(inputs[1].value);
+      maxX = parseFloat(inputs[2].value);
+      maxY = parseFloat(inputs[3].value);
+    }
     
     if (!isNaN(minX) && !isNaN(minY) && !isNaN(maxX) && !isNaN(maxY)) {
       const snapshot = getActiveShapes();
@@ -533,7 +689,7 @@ window.updateBoundingBoxFromInputs = function(id) {
       
       if (feature) {
         if (minX >= maxX || minY >= maxY) {
-          alert('Invalid bounding box: Min X must be < Max X, and Min Y must be < Max Y.');
+          alert('Invalid bounding box: Min/Top-Left X must be < Max/Bottom-Right X, and Min/Bottom-Right Y must be < Max/Top-Left Y.');
           updateCoordinatesPanel();
           return;
         }
@@ -581,6 +737,24 @@ window.changeFormat = function(id, selectElement) {
 
 function updateCoordinatesPanel() {
   const snapshot = getActiveShapes();
+  
+  // Sort snapshot according to geometryOrder if custom order exists
+  if (window.geometryOrder && window.geometryOrder.length > 0) {
+    const activeIds = snapshot.map(f => f.id);
+    window.geometryOrder = window.geometryOrder.filter(id => activeIds.includes(id));
+    
+    snapshot.forEach(f => {
+      if (!window.geometryOrder.includes(f.id)) {
+        window.geometryOrder.push(f.id);
+      }
+    });
+    
+    snapshot.sort((a, b) => {
+      return window.geometryOrder.indexOf(a.id) - window.geometryOrder.indexOf(b.id);
+    });
+  } else {
+    window.geometryOrder = snapshot.map(f => f.id);
+  }
   
   // Visually disable drawing tools if limit is reached
   const atLimit = snapshot.length >= 3;
@@ -640,10 +814,12 @@ function updateCoordinatesPanel() {
     const existingCard = document.getElementById('card-' + feature.id);
     if (existingCard && existingCard.dataset.format === selectedFormat) {
       // Just update text and title to prevent flickering!
-      if (selectedFormat === 'bbox') {
+      if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
         if (bounds) {
-          const vals = [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY];
+          const vals = selectedFormat === 'bbox_tlbr'
+            ? [bounds.minX, bounds.maxY, bounds.maxX, bounds.minY]
+            : [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY];
           const inputs = existingCard.querySelectorAll('.bbox-input');
           if (inputs.length === 4) {
             inputs.forEach((input, i) => {
@@ -692,20 +868,32 @@ function updateCoordinatesPanel() {
       const isExpanded = window.expandedCards[feature.id] || false;
       const expandIcon = isExpanded ? '↨' : '↕';
       const expandTitle = isExpanded ? "Collapse Box" : "Expand Box";
-      const expandBtnHtml = (selectedFormat !== 'bbox' && selectedFormat !== 'latlng') ? `<button class="icon-btn" title="${expandTitle}" onclick="toggleExpand(this)">${expandIcon}</button>` : '';
+      const expandBtnHtml = (selectedFormat !== 'bbox' && selectedFormat !== 'bbox_tlbr' && selectedFormat !== 'latlng') ? `<button class="icon-btn" title="${expandTitle}" onclick="toggleExpand(this)">${expandIcon}</button>` : '';
       
       let contentHtml = '';
-      if (selectedFormat === 'bbox') {
+      if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
         if (bounds) {
           const inputStyle = `width: 100%; border-radius: 4px; padding: 0.25rem; background: rgba(0, 0, 0, 0.2); color: var(--text-color); border: 1px solid var(--border-color); font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; outline: none; transition: border-color 0.2s; box-sizing: border-box;`;
           const onChangeFunc = `onchange="updateBoundingBoxFromInputs('${feature.id}')"`;
+          
+          let labels, vals, classes;
+          if (selectedFormat === 'bbox_tlbr') {
+            labels = ['Top Left X (Lng)', 'Top Left Y (Lat)', 'Bottom Right X (Lng)', 'Bottom Right Y (Lat)'];
+            vals = [bounds.minX, bounds.maxY, bounds.maxX, bounds.minY];
+            classes = ['tl-x', 'tl-y', 'br-x', 'br-y'];
+          } else {
+            labels = ['Min X (Lng)', 'Min Y (Lat)', 'Max X (Lng)', 'Max Y (Lat)'];
+            vals = [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY];
+            classes = ['min-x', 'min-y', 'max-x', 'max-y'];
+          }
+
           contentHtml = `
             <div class="bbox-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Min X (Lng)</label><input type="number" step="any" class="bbox-input min-x" value="${bounds.minX.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Min Y (Lat)</label><input type="number" step="any" class="bbox-input min-y" value="${bounds.minY.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Max X (Lng)</label><input type="number" step="any" class="bbox-input max-x" value="${bounds.maxX.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Max Y (Lat)</label><input type="number" step="any" class="bbox-input max-y" value="${bounds.maxY.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[0]}</label><input type="number" step="any" class="bbox-input ${classes[0]}" value="${vals[0].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[1]}</label><input type="number" step="any" class="bbox-input ${classes[1]}" value="${vals[1].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[2]}</label><input type="number" step="any" class="bbox-input ${classes[2]}" value="${vals[2].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[3]}</label><input type="number" step="any" class="bbox-input ${classes[3]}" value="${vals[3].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
             </div>
           `;
         }
@@ -717,16 +905,19 @@ function updateCoordinatesPanel() {
         `;
       }
       
-      const cardHtml = `
-        <div class="glass-panel geometry-card ${existingCard ? '' : 'new-card'}" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">
+      const cardInnerHtml = `
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
               ${iconHtml}
               <input class="title-input" type="text" value="${feature.properties.name || `${type} ${index + 1}`}" style="margin: 0; text-transform: capitalize; background: transparent; border: 1px solid transparent; color: var(--text-color); font-size: 1rem; font-weight: bold; outline: none; padding: 2px 4px; border-radius: 4px; transition: border-color 0.2s; width: 130px;" onchange="updateFeatureName('${feature.id}', this.value)" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
             </div>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
               <select class="glow-select" style="background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border-color); padding: 0.15rem 0.25rem; border-radius: 4px; outline: none; cursor: pointer; font-size: 0.75rem;" onchange="changeFormat('${feature.id}', this)">
-                ${mode === 'rectangle' ? `<option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>Bounding Box</option>` : ''}
+                ${mode === 'rectangle' ? `
+                  <option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>Bounding Box (Min/Max)</option>
+                  <option value="bbox_tlbr" ${selectedFormat === 'bbox_tlbr' ? 'selected' : ''}>Bounding Box (TL/BR)</option>
+                ` : ''}
                 ${mode === 'point' ? `<option value="latlng" ${selectedFormat === 'latlng' ? 'selected' : ''}>Lat/Lng Text</option>` : ''}
                 <option value="geojson" ${selectedFormat === 'geojson' ? 'selected' : ''}>GeoJSON</option>
                 <option value="wkt" ${selectedFormat === 'wkt' ? 'selected' : ''}>WKT</option>
@@ -738,12 +929,14 @@ function updateCoordinatesPanel() {
             </div>
           </div>
           ${contentHtml}
-        </div>
       `;
       
       if (existingCard) {
-        existingCard.outerHTML = cardHtml;
+        // Update in-place without destroying the element — prevents flicker
+        existingCard.dataset.format = selectedFormat;
+        existingCard.innerHTML = cardInnerHtml;
       } else {
+        const cardHtml = `<div class="glass-panel geometry-card new-card" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">${cardInnerHtml}</div>`;
         geometryCardsWrapper.insertAdjacentHTML('beforeend', cardHtml);
       }
     }

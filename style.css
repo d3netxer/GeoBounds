@@ -443,3 +443,42 @@ body {
 .icon-btn.delete:hover {
   color: #ff4444;
 }
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.drag-handle:hover {
+  color: var(--text-color);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+body.is-dragging,
+body.is-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.geometry-card.dragging {
+  opacity: 0.85;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  transition: none;
+}
+
+.drag-placeholder {
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
