@@ -668,10 +668,20 @@ window.updateBoundingBoxFromInputs = function(id) {
     const inputs = card.querySelectorAll('.bbox-input');
     if (inputs.length !== 4) return;
     
-    const minX = parseFloat(inputs[0].value);
-    const minY = parseFloat(inputs[1].value);
-    const maxX = parseFloat(inputs[2].value);
-    const maxY = parseFloat(inputs[3].value);
+    const format = card.dataset.format;
+    let minX, minY, maxX, maxY;
+
+    if (format === 'bbox_tlbr') {
+      minX = parseFloat(inputs[0].value);
+      maxY = parseFloat(inputs[1].value);
+      maxX = parseFloat(inputs[2].value);
+      minY = parseFloat(inputs[3].value);
+    } else {
+      minX = parseFloat(inputs[0].value);
+      minY = parseFloat(inputs[1].value);
+      maxX = parseFloat(inputs[2].value);
+      maxY = parseFloat(inputs[3].value);
+    }
     
     if (!isNaN(minX) && !isNaN(minY) && !isNaN(maxX) && !isNaN(maxY)) {
       const snapshot = getActiveShapes();
@@ -679,7 +689,7 @@ window.updateBoundingBoxFromInputs = function(id) {
       
       if (feature) {
         if (minX >= maxX || minY >= maxY) {
-          alert('Invalid bounding box: Min X must be < Max X, and Min Y must be < Max Y.');
+          alert('Invalid bounding box: Min/Top-Left X must be < Max/Bottom-Right X, and Min/Bottom-Right Y must be < Max/Top-Left Y.');
           updateCoordinatesPanel();
           return;
         }
@@ -804,10 +814,12 @@ function updateCoordinatesPanel() {
     const existingCard = document.getElementById('card-' + feature.id);
     if (existingCard && existingCard.dataset.format === selectedFormat) {
       // Just update text and title to prevent flickering!
-      if (selectedFormat === 'bbox') {
+      if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
         if (bounds) {
-          const vals = [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY];
+          const vals = selectedFormat === 'bbox_tlbr'
+            ? [bounds.minX, bounds.maxY, bounds.maxX, bounds.minY]
+            : [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY];
           const inputs = existingCard.querySelectorAll('.bbox-input');
           if (inputs.length === 4) {
             inputs.forEach((input, i) => {
@@ -856,20 +868,32 @@ function updateCoordinatesPanel() {
       const isExpanded = window.expandedCards[feature.id] || false;
       const expandIcon = isExpanded ? '↨' : '↕';
       const expandTitle = isExpanded ? "Collapse Box" : "Expand Box";
-      const expandBtnHtml = (selectedFormat !== 'bbox' && selectedFormat !== 'latlng') ? `<button class="icon-btn" title="${expandTitle}" onclick="toggleExpand(this)">${expandIcon}</button>` : '';
+      const expandBtnHtml = (selectedFormat !== 'bbox' && selectedFormat !== 'bbox_tlbr' && selectedFormat !== 'latlng') ? `<button class="icon-btn" title="${expandTitle}" onclick="toggleExpand(this)">${expandIcon}</button>` : '';
       
       let contentHtml = '';
-      if (selectedFormat === 'bbox') {
+      if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
         if (bounds) {
           const inputStyle = `width: 100%; border-radius: 4px; padding: 0.25rem; background: rgba(0, 0, 0, 0.2); color: var(--text-color); border: 1px solid var(--border-color); font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; outline: none; transition: border-color 0.2s; box-sizing: border-box;`;
           const onChangeFunc = `onchange="updateBoundingBoxFromInputs('${feature.id}')"`;
+          
+          let labels, vals, classes;
+          if (selectedFormat === 'bbox_tlbr') {
+            labels = ['Top Left X (Lng)', 'Top Left Y (Lat)', 'Bottom Right X (Lng)', 'Bottom Right Y (Lat)'];
+            vals = [bounds.minX, bounds.maxY, bounds.maxX, bounds.minY];
+            classes = ['tl-x', 'tl-y', 'br-x', 'br-y'];
+          } else {
+            labels = ['Min X (Lng)', 'Min Y (Lat)', 'Max X (Lng)', 'Max Y (Lat)'];
+            vals = [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY];
+            classes = ['min-x', 'min-y', 'max-x', 'max-y'];
+          }
+
           contentHtml = `
             <div class="bbox-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Min X (Lng)</label><input type="number" step="any" class="bbox-input min-x" value="${bounds.minX.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Min Y (Lat)</label><input type="number" step="any" class="bbox-input min-y" value="${bounds.minY.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Max X (Lng)</label><input type="number" step="any" class="bbox-input max-x" value="${bounds.maxX.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
-              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">Max Y (Lat)</label><input type="number" step="any" class="bbox-input max-y" value="${bounds.maxY.toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[0]}</label><input type="number" step="any" class="bbox-input ${classes[0]}" value="${vals[0].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[1]}</label><input type="number" step="any" class="bbox-input ${classes[1]}" value="${vals[1].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[2]}</label><input type="number" step="any" class="bbox-input ${classes[2]}" value="${vals[2].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
+              <div><label style="font-size: 0.75rem; color: #aaa; margin-bottom: 2px; display: block;">${labels[3]}</label><input type="number" step="any" class="bbox-input ${classes[3]}" value="${vals[3].toFixed(4)}" style="${inputStyle}" ${onChangeFunc} onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'"></div>
             </div>
           `;
         }
@@ -890,7 +914,10 @@ function updateCoordinatesPanel() {
             </div>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
               <select class="glow-select" style="background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border-color); padding: 0.15rem 0.25rem; border-radius: 4px; outline: none; cursor: pointer; font-size: 0.75rem;" onchange="changeFormat('${feature.id}', this)">
-                ${mode === 'rectangle' ? `<option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>Bounding Box</option>` : ''}
+                ${mode === 'rectangle' ? `
+                  <option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>Bounding Box (Min/Max)</option>
+                  <option value="bbox_tlbr" ${selectedFormat === 'bbox_tlbr' ? 'selected' : ''}>Bounding Box (TL/BR)</option>
+                ` : ''}
                 ${mode === 'point' ? `<option value="latlng" ${selectedFormat === 'latlng' ? 'selected' : ''}>Lat/Lng Text</option>` : ''}
                 <option value="geojson" ${selectedFormat === 'geojson' ? 'selected' : ''}>GeoJSON</option>
                 <option value="wkt" ${selectedFormat === 'wkt' ? 'selected' : ''}>WKT</option>
