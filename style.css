@@ -599,3 +599,24 @@ body.is-dragging * {
     margin-right: 10px !important;
   }
 }
+
+/* Custom Map Pin Marker Animations & Styles */
+.custom-map-pin-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+@keyframes dropPin {
+  0% {
+    opacity: 0;
+    transform: translateY(-25px) rotate(-45deg) scale(0.4);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(4px) rotate(-45deg) scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(-45deg) scale(1);
+  }
+}

@@ -4,9 +4,12 @@ const map = L.map('map', {
   zoom: 3,
   zoomControl: false // We reposition it later
 });
+window.map = map;
 
 // Add zoom control at bottom left
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+const pointPinLayerGroup = L.layerGroup().addTo(map);
 
 // Define base tile layers
 const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -348,8 +351,8 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
           const lat = position.coords.latitude;
           const lng = position.coords.longitude;
 
-          // 1. Zoom into the user's real location
-          map.setView([lat, lng], 15);
+          // 1. Zoom into the user's real location instantly to ensure exact coordinate projection
+          map.setView([lat, lng], 15, { animate: false });
 
           // 2. Automatically add a pin at the center/location with coordinates
           const color = getAvailableColor();
@@ -851,6 +854,26 @@ function updateCoordinatesPanel() {
       }
     }
   });
+
+  // Update map pin markers for Point features
+  if (typeof pointPinLayerGroup !== 'undefined') {
+    pointPinLayerGroup.clearLayers();
+    snapshot.forEach(f => {
+      if (f.geometry && f.geometry.type === 'Point') {
+        const [lng, lat] = f.geometry.coordinates;
+        const color = f.properties.color || window.currentDrawingColor || '#FF3B30';
+        const pinIcon = L.divIcon({
+          className: 'custom-map-pin-icon',
+          html: `<div style="background: ${color}; width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2.5px solid #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; margin-top: -14px; margin-left: -14px; animation: dropPin 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+                   <div style="width: 10px; height: 10px; background: #ffffff; border-radius: 50%;"></div>
+                 </div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 28]
+        });
+        L.marker([lat, lng], { icon: pinIcon }).addTo(pointPinLayerGroup);
+      }
+    });
+  }
   
   if (!snapshot || snapshot.length === 0) {
     geometryCardsWrapper.innerHTML = `
