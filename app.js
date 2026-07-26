@@ -82,7 +82,8 @@ const selectMode = new TerraDrawSelectMode({
     selectedLineStringColor: (f) => f.properties.color || '#4285f4',
     selectedPointColor: (f) => f.properties.color || '#4285f4',
     selectedPointOutlineColor: (f) => f.properties.color || '#4285f4',
-    selectedPointOutlineWidth: 3
+    selectedPointOutlineWidth: 3,
+    selectedPointWidth: 16
   }
 });
 
@@ -116,7 +117,8 @@ const draw = new TerraDraw({
       styles: {
         pointColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
         pointOutlineColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
-        pointOutlineWidth: 3
+        pointOutlineWidth: 3,
+        pointWidth: 16
       }
     })
   ]
@@ -351,6 +353,7 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
 
           // 2. Automatically add a pin at the center/location with coordinates
           const color = getAvailableColor();
+          window.isUpdatingProgrammatically = true;
           draw.addFeatures([{
             type: "Feature",
             properties: {
@@ -363,8 +366,14 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
               coordinates: [lng, lat]
             }
           }]);
+          window.isUpdatingProgrammatically = false;
 
           updateCoordinatesPanel();
+
+          // Switch to select mode so the pin is immediately highlighted on the map
+          draw.setMode('select');
+          document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+
           if (window.showToast) {
             window.showToast("Zoomed to location & added pin!", "#3fb950");
           }
