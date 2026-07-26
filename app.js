@@ -317,6 +317,78 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
       window.currentDrawingColor = getAvailableColor();
       return;
     }
+
+    if (btn.id === 'locate-btn') {
+      if (getActiveShapes().length >= 3) {
+        showLimitToast();
+        return;
+      }
+
+      if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser.');
+        return;
+      }
+
+      const originalText = btn.innerText;
+      btn.innerText = '⌛';
+      btn.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          btn.innerText = originalText;
+          btn.disabled = false;
+
+          if (getActiveShapes().length >= 3) {
+            showLimitToast();
+            return;
+          }
+
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+
+          // Pan and zoom map to locate coordinates
+          map.setView([lat, lng], 15);
+
+          const color = getAvailableColor();
+          draw.addFeatures([{
+            type: "Feature",
+            properties: {
+              mode: "point",
+              name: "My Location",
+              color: color
+            },
+            geometry: {
+              type: "Point",
+              coordinates: [lng, lat]
+            }
+          }]);
+
+          updateCoordinatesPanel();
+          if (window.showToast) {
+            window.showToast("Located your coordinates!", "#3fb950");
+          }
+        },
+        (error) => {
+          btn.innerText = originalText;
+          btn.disabled = false;
+          let errMsg = "Unable to retrieve your location.";
+          if (error.code === error.PERMISSION_DENIED) {
+            errMsg = "Location permission denied.";
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            errMsg = "Location information is unavailable.";
+          } else if (error.code === error.TIMEOUT) {
+            errMsg = "Location request timed out.";
+          }
+          if (window.showToast) {
+            window.showToast(errMsg, "#ff4444");
+          } else {
+            alert(errMsg);
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+      return;
+    }
     
     // Check limit before allowing draw mode
     const mode = btn.dataset.mode;

@@ -247,6 +247,21 @@ body {
 }
 
 /* Custom Terra Draw Toolbar */
+.terra-toolbar {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  bottom: auto;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  width: auto;
+  max-width: none;
+  z-index: 1000;
+}
+
 .tool-btn {
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid var(--border-color);
@@ -481,4 +496,106 @@ body.is-dragging * {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
   box-sizing: border-box;
+}
+
+/* Mobile & Responsive Layout Styles */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0.6rem 1rem;
+  }
+  
+  .app-header h1 {
+    font-size: 1.2rem;
+  }
+
+  .app-header p {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .search-panel {
+    top: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    max-width: none;
+    padding: 0.5rem;
+    gap: 0.4rem;
+  }
+
+  #search-input {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .glow-btn {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+  }
+
+  .terra-toolbar {
+    top: 4.25rem;
+    left: 0.75rem;
+    right: auto;
+    flex-direction: row;
+    gap: 0.35rem;
+    padding: 0.35rem;
+  }
+
+  .tool-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 1.2rem;
+  }
+
+  #geometry-output-container {
+    left: 0.75rem !important;
+    right: 0.75rem !important;
+    bottom: 0.75rem !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 45vh !important;
+    overflow-y: auto;
+  }
+
+  .geometry-card {
+    min-width: 0 !important;
+    width: 100% !important;
+    padding: 0.75rem !important;
+  }
+
+  .bbox-grid {
+    gap: 0.35rem !important;
+  }
+
+  .bbox-grid label {
+    font-size: 0.7rem !important;
+  }
+
+  .bbox-input {
+    padding: 0.2rem 0.35rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  #toast-notification {
+    top: 7.25rem !important;
+    font-size: 0.8rem !important;
+    width: 90% !important;
+    max-width: 320px !important;
+    padding: 0.4rem 0.8rem !important;
+  }
+
+  .leaflet-control-zoom {
+    transform: scale(1.2) !important;
+    margin-left: 10px !important;
+    margin-bottom: 15px !important;
+  }
+
+  .leaflet-control-layers {
+    transform: scale(1.2) !important;
+    margin-top: 80px !important;
+    margin-right: 10px !important;
+  }
 }
