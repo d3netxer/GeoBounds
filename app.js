@@ -11,6 +11,19 @@ L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
 const pointPinLayerGroup = L.layerGroup().addTo(map);
 
+function createPinIcon(color) {
+  const pinSvg = `<svg width="48" height="58" viewBox="0 0 48 58" xmlns="http://www.w3.org/2000/svg" style="display:block; overflow:visible; filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.45)); cursor: pointer;">
+    <path d="M24 8C15.163 8 8 15.163 8 24C8 36 24 50 24 50C24 50 40 36 40 24C40 15.163 32.837 8 24 8Z" fill="${color}" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="24" cy="24" r="5.5" fill="#FFFFFF"/>
+  </svg>`;
+  return L.divIcon({
+    className: 'custom-map-pin-icon',
+    html: pinSvg,
+    iconSize: [48, 58],
+    iconAnchor: [24, 50]
+  });
+}
+
 // Define base tile layers
 const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
@@ -118,10 +131,10 @@ const draw = new TerraDraw({
     }),
     new TerraDrawPointMode({
       styles: {
-        pointColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
-        pointOutlineColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
+        pointColor: (f) => f.properties.color || window.currentDrawingColor || '#FF3B30',
+        pointOutlineColor: '#ffffff',
         pointOutlineWidth: 3,
-        pointWidth: 16
+        pointWidth: 20
       }
     })
   ]
@@ -317,6 +330,20 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
         map.removeLayer(searchPolygonLayer);
         searchPolygonLayer = null;
       }
+      // Clean up directly-added locate markers and tracking
+      if (window._locateMarkers) {
+        window._locateMarkers.forEach(m => map.removeLayer(m.marker || m));
+        window._locateMarkers = [];
+      }
+      if (window._locateFeatureIds) {
+        window._locateFeatureIds = [];
+      }
+      if (window._pointMarkers) {
+        window._pointMarkers.clear();
+      }
+      if (typeof pointPinLayerGroup !== 'undefined') {
+        pointPinLayerGroup.clearLayers();
+      }
       updateCoordinatesPanel();
       document.getElementById('toast-notification').style.display = 'none';
       window.currentDrawingColor = getAvailableColor();
@@ -329,76 +356,110 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
         return;
       }
 
-      if (!navigator.geolocation) {
-        alert('Geolocation is not supported by your browser.');
-        return;
-      }
-
-      const originalText = btn.innerText;
-      btn.innerText = '⌛';
+      const originalContent = btn.innerHTML;
+      btn.textContent = '⌛';
       btn.disabled = true;
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          btn.innerText = originalText;
-          btn.disabled = false;
+      const addPinAtCoords = (lat, lng, name, toastMsg, toastColor) => {
+        try {
+          // Terra Draw's Leaflet adapter accepts at most 9 decimal places.
+          // Browser geolocation and Leaflet map centers can exceed that.
+          const normalizedLat = Number(lat.toFixed(9));
+          const normalizedLng = Number(lng.toFixed(9));
 
-          if (getActiveShapes().length >= 3) {
-            showLimitToast();
-            return;
-          }
+          // 1. Zoom to location & invalidate map size
+          map.setView([normalizedLat, normalizedLng], 15);
+          setTimeout(() => { map.invalidateSize(); }, 100);
 
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-
-          // 1. Zoom into the user's real location instantly to ensure exact coordinate projection
-          map.setView([lat, lng], 15, { animate: false });
-
-          // 2. Automatically add a pin at the center/location with coordinates
-          const color = getAvailableColor();
+          // 2. Block ALL TerraDraw change events during the entire operation
           window.isUpdatingProgrammatically = true;
-          draw.addFeatures([{
+
+          // 3. Add feature to TerraDraw (data model & rendering)
+          const color = getAvailableColor();
+          const featureId = draw.getFeatureId();
+
+          const [addResult] = draw.addFeatures([{
+            id: featureId,
             type: "Feature",
             properties: {
               mode: "point",
-              name: "My Location",
+              name: name || "My Location",
               color: color
             },
             geometry: {
               type: "Point",
-              coordinates: [lng, lat]
+              coordinates: [normalizedLng, normalizedLat]
             }
           }]);
-          window.isUpdatingProgrammatically = false;
+          if (!addResult || !addResult.valid) {
+            throw new Error(addResult?.reason || 'Location point could not be added');
+          }
 
-          updateCoordinatesPanel();
-
-          // Switch to select mode so the pin is immediately highlighted on the map
+          // 4. Switch to select mode and select feature
           draw.setMode('select');
+          try { draw.selectFeature(featureId); } catch(e) {}
           document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
 
-          if (window.showToast) {
-            window.showToast("Zoomed to location & added pin!", "#3fb950");
+          // 5. Track locate feature ID & create direct Leaflet pin marker
+          if (!window._locateFeatureIds) window._locateFeatureIds = [];
+          window._locateFeatureIds.push(featureId);
+
+          const pinIcon = createPinIcon(color);
+          const locateMarker = L.marker([normalizedLat, normalizedLng], { icon: pinIcon, zIndexOffset: 1000 }).addTo(map);
+          if (!window._locateMarkers) window._locateMarkers = [];
+          window._locateMarkers.push({ marker: locateMarker, featureId: featureId });
+
+          // 6. Cancel any pending debounced updates
+          if (updatePanelTimer) {
+            cancelAnimationFrame(updatePanelTimer);
+            updatePanelTimer = null;
           }
+
+          // 7. Update coordinate cards and map pin markers synchronously
+          updateCoordinatesPanel();
+
+          // 8. Unblock change events
+          window.isUpdatingProgrammatically = false;
+
+          // Terra Draw updates synchronously today, but refreshing on the next
+          // frame also keeps the coordinate card correct if rendering is deferred.
+          requestAnimationFrame(updateCoordinatesPanel);
+
+          if (window.showToast) {
+            window.showToast(toastMsg, toastColor);
+          }
+        } catch (err) {
+          window.isUpdatingProgrammatically = false;
+          console.error('[LOCATE] Error in addPinAtCoords:', err);
+        } finally {
+          btn.innerHTML = originalContent;
+          btn.disabled = false;
+        }
+      };
+
+      if (!navigator.geolocation) {
+        const center = map.getCenter();
+        addPinAtCoords(center.lat, center.lng, "Map Center", "Geolocation unsupported - added pin at center", "#ff9f0a");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          console.log('[LOCATE] Geolocation success:', lat, lng);
+          addPinAtCoords(lat, lng, "My Location", "Zoomed to location & added pin!", "#3fb950");
         },
         (error) => {
-          btn.innerText = originalText;
-          btn.disabled = false;
-          let errMsg = "Unable to retrieve your location.";
+          console.warn('[LOCATE] Geolocation error or denied:', error);
+          const center = map.getCenter();
+          let msg = "Location unavailable - added pin at map center";
           if (error.code === error.PERMISSION_DENIED) {
-            errMsg = "Location permission denied.";
-          } else if (error.code === error.POSITION_UNAVAILABLE) {
-            errMsg = "Location information is unavailable.";
-          } else if (error.code === error.TIMEOUT) {
-            errMsg = "Location request timed out.";
+            msg = "Location permission denied - added pin at map center";
           }
-          if (window.showToast) {
-            window.showToast(errMsg, "#ff4444");
-          } else {
-            alert(errMsg);
-          }
+          addPinAtCoords(center.lat, center.lng, "Map Center", msg, "#ff9f0a");
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
       );
       return;
     }
@@ -439,65 +500,58 @@ draw.on('deselect', () => {
   debouncedUpdatePanel();
 });
 draw.on('finish', (eventId) => {
-  setTimeout(() => {
-    let id = typeof eventId === 'object' ? (eventId.id || eventId.featureId) : eventId;
-    
-    const snapshot = getActiveShapes();
-    if (snapshot.length === 0) return;
-    
-    if (!id) {
-      id = snapshot[snapshot.length - 1].id;
-    }
-    
-    // Enforce 3 shape limit if they managed to draw while already at limit
-    if (snapshot.length > 3) {
-      try { draw.removeFeatures([id]); } catch(e) {}
-      showLimitToast();
-      draw.setMode('select');
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      return;
-    }
-    
-    // Trigger notification immediately on 3rd shape
-    if (snapshot.length === 3) {
-      showLimitToast();
-    }
-    
-    // Assign color to the new feature
-    const feature = snapshot.find(f => f.id === id);
-    if (feature && !feature.properties.color) {
-      const availableColor = window.currentDrawingColor || getAvailableColor();
-      feature.properties = feature.properties || {};
-      feature.properties.color = availableColor;
-      
-      try {
-        window.isUpdatingProgrammatically = true;
-        draw.removeFeatures([id]);
-        draw.addFeatures([feature]);
-        window.isUpdatingProgrammatically = false;
-      } catch(e) {
-        window.isUpdatingProgrammatically = false;
-      }
-    }
-    
-    window.currentDrawingColor = getAvailableColor();
-    
+  let id = typeof eventId === 'object' ? (eventId.id || eventId.featureId) : eventId;
+
+  const snapshot = getActiveShapes();
+  if (snapshot.length === 0) return;
+
+  if (!id) {
+    id = snapshot[snapshot.length - 1].id;
+  }
+
+  // Enforce 3 shape limit if they managed to draw while already at limit
+  if (snapshot.length > 3) {
+    try { draw.removeFeatures([id]); } catch(e) {}
+    showLimitToast();
     draw.setMode('select');
-    
-    setTimeout(() => {
-      try {
-        draw.selectFeature(id);
-      } catch (e) {
-        console.log('Auto-select failed:', e);
-        try {
-          const snap = draw.getSnapshot();
-          if (snap.length > 0) draw.selectFeature(snap[0].id);
-        } catch(e2) {}
-      }
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      updateCoordinatesPanel();
-    }, 50);
-  }, 50);
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    return;
+  }
+
+  // Trigger notification immediately on 3rd shape
+  if (snapshot.length === 3) {
+    showLimitToast();
+  }
+
+  window.isUpdatingProgrammatically = true;
+
+  // Assign color to the new feature
+  const feature = snapshot.find(f => f.id === id);
+  if (feature) {
+    feature.properties = feature.properties || {};
+    if (!feature.properties.color) {
+      feature.properties.color = window.currentDrawingColor || getAvailableColor();
+    }
+    if (!feature.properties.mode) {
+      feature.properties.mode = feature.geometry.type === 'Point' ? 'point' : (feature.geometry.type === 'LineString' ? 'linestring' : 'polygon');
+    }
+    try {
+      draw.removeFeatures([id]);
+      draw.addFeatures([feature]);
+    } catch(e) {}
+  }
+
+  window.currentDrawingColor = getAvailableColor();
+
+  try {
+    draw.setMode('select');
+    draw.selectFeature(id);
+  } catch (e) {}
+
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  updateCoordinatesPanel();
+
+  window.isUpdatingProgrammatically = false;
 });
 
 // UI Elements
@@ -549,6 +603,20 @@ window.deleteShape = function(id) {
     window.currentDrawingColor = getAvailableColor();
     if (window.expandedCards && window.expandedCards[id] !== undefined) {
       delete window.expandedCards[id];
+    }
+    if (window._locateFeatureIds && window._locateFeatureIds.includes(id)) {
+      window._locateFeatureIds = window._locateFeatureIds.filter(fid => fid !== id);
+      if (window._locateMarkers) {
+        const entry = window._locateMarkers.find(m => m.featureId === id);
+        if (entry) {
+          map.removeLayer(entry.marker || entry);
+          window._locateMarkers = window._locateMarkers.filter(m => m.featureId !== id);
+        }
+      }
+    }
+    if (window._pointMarkers && window._pointMarkers.has(id)) {
+      pointPinLayerGroup.removeLayer(window._pointMarkers.get(id).marker);
+      window._pointMarkers.delete(id);
     }
     updateCoordinatesPanel();
   } catch(e) {
@@ -771,7 +839,7 @@ window.updateBoundingBoxFromInputs = function(id) {
     if (!isNaN(minX) && !isNaN(minY) && !isNaN(maxX) && !isNaN(maxY)) {
       const snapshot = getActiveShapes();
       const feature = snapshot.find(f => f.id === id);
-      
+
       if (feature) {
         if (minX >= maxX || minY >= maxY) {
           alert('Invalid bounding box: Min/Top-Left X must be < Max/Bottom-Right X, and Min/Bottom-Right Y must be < Max/Top-Left Y.');
@@ -855,22 +923,39 @@ function updateCoordinatesPanel() {
     }
   });
 
-  // Update map pin markers for Point features
+  // Update map pin markers for Point features (Smart Marker Sync to eliminate redraw flicker)
   if (typeof pointPinLayerGroup !== 'undefined') {
-    pointPinLayerGroup.clearLayers();
-    snapshot.forEach(f => {
-      if (f.geometry && f.geometry.type === 'Point') {
-        const [lng, lat] = f.geometry.coordinates;
-        const color = f.properties.color || window.currentDrawingColor || '#FF3B30';
-        const pinIcon = L.divIcon({
-          className: 'custom-map-pin-icon',
-          html: `<div style="background: ${color}; width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2.5px solid #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; margin-top: -14px; margin-left: -14px; animation: dropPin 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
-                   <div style="width: 10px; height: 10px; background: #ffffff; border-radius: 50%;"></div>
-                 </div>`,
-          iconSize: [28, 28],
-          iconAnchor: [14, 28]
-        });
-        L.marker([lat, lng], { icon: pinIcon }).addTo(pointPinLayerGroup);
+    window._pointMarkers = window._pointMarkers || new Map();
+    const activePointFeatures = snapshot.filter(f => f.geometry && f.geometry.type === 'Point' && !(window._locateFeatureIds && window._locateFeatureIds.includes(f.id)));
+    const activePointIds = new Set(activePointFeatures.map(f => f.id));
+
+    // Clean up markers for deleted features
+    for (const [id, item] of window._pointMarkers.entries()) {
+      if (!activePointIds.has(id)) {
+        pointPinLayerGroup.removeLayer(item.marker);
+        window._pointMarkers.delete(id);
+      }
+    }
+
+    // Add or update markers for active point features
+    activePointFeatures.forEach(f => {
+      const [lng, lat] = f.geometry.coordinates;
+      const color = f.properties.color || window.currentDrawingColor || '#FF3B30';
+
+      if (window._pointMarkers.has(f.id)) {
+        const existing = window._pointMarkers.get(f.id);
+        if (existing.lat !== lat || existing.lng !== lng) {
+          existing.marker.setLatLng([lat, lng]);
+          existing.lat = lat;
+          existing.lng = lng;
+        }
+        if (existing.color !== color) {
+          existing.marker.setIcon(createPinIcon(color));
+          existing.color = color;
+        }
+      } else {
+        const marker = L.marker([lat, lng], { icon: createPinIcon(color), zIndexOffset: 1000 }).addTo(pointPinLayerGroup);
+        window._pointMarkers.set(f.id, { marker, color, lat, lng });
       }
     });
   }
@@ -899,7 +984,7 @@ function updateCoordinatesPanel() {
   snapshot.forEach((feature, index) => {
     const color = feature.properties.color || window.currentDrawingColor || '#4285f4';
     const type = feature.geometry.type;
-    const mode = feature.properties.mode || 'polygon';
+    const mode = feature.properties.mode || (type === 'Point' ? 'point' : (type === 'LineString' ? 'linestring' : 'polygon'));
     const selectedFormat = feature.properties.format || (mode === 'rectangle' ? 'bbox' : (mode === 'point' ? 'latlng' : 'geojson'));
     
     // Calculate content text
@@ -913,7 +998,7 @@ function updateCoordinatesPanel() {
     } else if (selectedFormat === 'latlng') {
       const lon = feature.geometry.coordinates[0];
       const lat = feature.geometry.coordinates[1];
-      newText = `latitude:  ${lat.toFixed(4)} longitude: ${lon.toFixed(4)}`;
+      newText = `latitude:  ${lat.toFixed(4)}\nlongitude: ${lon.toFixed(4)}`;
     }
     
     const existingCard = document.getElementById('card-' + feature.id);
@@ -1003,8 +1088,8 @@ function updateCoordinatesPanel() {
           `;
         }
       } else {
-        const defaultRows = selectedFormat === 'latlng' ? 1 : 5;
-        const currentRows = selectedFormat === 'latlng' ? 1 : (isExpanded ? 20 : 5);
+        const defaultRows = selectedFormat === 'latlng' ? 2 : 5;
+        const currentRows = selectedFormat === 'latlng' ? 2 : (isExpanded ? 20 : 5);
         contentHtml = `
           <textarea rows="${currentRows}" data-default-rows="${defaultRows}" style="width: 100%; border-radius: 6px; padding: 0.5rem; background: rgba(0, 0, 0, 0.2); color: var(--text-color); border: 1px solid var(--border-color); font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; resize: vertical;" readonly>${newText}</textarea>
         `;

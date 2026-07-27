@@ -401,7 +401,9 @@ body {
 }
 
 .geometry-card {
-  min-width: 420px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .geometry-card.new-card {
@@ -601,22 +603,29 @@ body.is-dragging * {
 }
 
 /* Custom Map Pin Marker Animations & Styles */
+.leaflet-marker-pane {
+  z-index: 9999 !important;
+}
+
 .custom-map-pin-icon {
   background: transparent !important;
   border: none !important;
+  overflow: visible !important;
+  z-index: 9999 !important;
+  pointer-events: none !important;
 }
 
 @keyframes dropPin {
   0% {
     opacity: 0;
-    transform: translateY(-25px) rotate(-45deg) scale(0.4);
+    transform: translateY(-30px) scale(0.3);
   }
   70% {
     opacity: 1;
-    transform: translateY(4px) rotate(-45deg) scale(1.1);
+    transform: translateY(4px) scale(1.1);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) rotate(-45deg) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
