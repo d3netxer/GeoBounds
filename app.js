@@ -580,6 +580,103 @@ function calculateBounds(features) {
   return hasCoords ? { minX, minY, maxX, maxY } : null;
 }
 
+// Geodesic Area calculation in square meters (WGS84 Earth authalic radius = 6378137m)
+function calculatePolygonAreaSqMeters(coordinates) {
+  if (!coordinates || !coordinates.length) return 0;
+  const ring = Array.isArray(coordinates[0][0]) ? coordinates[0] : coordinates;
+  if (ring.length < 3) return 0;
+
+  const RAD = Math.PI / 180;
+  const EARTH_RADIUS = 6378137;
+  let area = 0;
+
+  for (let i = 0; i < ring.length - 1; i++) {
+    const p1 = ring[i];
+    const p2 = ring[i + 1];
+    area += (p2[0] * RAD - p1[0] * RAD) * (2 + Math.sin(p1[1] * RAD) + Math.sin(p2[1] * RAD));
+  }
+
+  return Math.abs(area * EARTH_RADIUS * EARTH_RADIUS / 2);
+}
+
+// Geodesic Line Length calculation in meters
+function calculateLineLengthMeters(coordinates) {
+  if (!coordinates || !coordinates.length) return 0;
+  const points = Array.isArray(coordinates[0][0]) ? coordinates[0] : coordinates;
+  if (points.length < 2) return 0;
+  let totalMeters = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = L.latLng(points[i][1], points[i][0]);
+    const p2 = L.latLng(points[i + 1][1], points[i + 1][0]);
+    totalMeters += p1.distanceTo(p2);
+  }
+  return totalMeters;
+}
+
+// Format Area according to selected unit (no decimal points)
+function formatArea(sqMeters, unit) {
+  if (!sqMeters || sqMeters === 0) return '0 sq km';
+  let value, unitLabel;
+  switch(unit) {
+    case 'ha':
+      value = sqMeters / 10000;
+      unitLabel = 'ha';
+      break;
+    case 'ac':
+      value = sqMeters / 4046.8564224;
+      unitLabel = 'ac';
+      break;
+    case 'sqmi':
+      value = sqMeters / 2589988.11;
+      unitLabel = 'sq mi';
+      break;
+    case 'km2':
+    default:
+      value = sqMeters / 1000000;
+      unitLabel = 'sq km';
+      break;
+  }
+  const formattedVal = Math.round(value).toLocaleString();
+  return `${formattedVal} ${unitLabel}`;
+}
+
+// Format Length according to selected unit (km, mi with decimals; m without decimals)
+function formatLength(meters, unit) {
+  if (!meters || meters === 0) return '0 km';
+  let value, unitLabel;
+  switch(unit) {
+    case 'mi':
+      value = meters / 1609.344;
+      unitLabel = 'mi';
+      break;
+    case 'm':
+      value = meters;
+      unitLabel = 'm';
+      break;
+    case 'km':
+    default:
+      value = meters / 1000;
+      unitLabel = 'km';
+      break;
+  }
+  let formattedVal;
+  if (unit === 'm') {
+    formattedVal = Math.round(value).toLocaleString();
+  } else {
+    formattedVal = value >= 1000
+      ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : value.toFixed(2);
+  }
+  return `${formattedVal} ${unitLabel}`;
+}
+
+window.cardUnits = window.cardUnits || {};
+
+window.changeMeasurementUnit = function(id, selectEl) {
+  window.cardUnits[id] = selectEl.value;
+  updateCoordinatesPanel();
+};
+
 function geojsonToWkt(geometry) {
   const type = geometry.type.toUpperCase();
   const coords = geometry.coordinates;
@@ -1002,8 +1099,21 @@ function updateCoordinatesPanel() {
     }
     
     const existingCard = document.getElementById('card-' + feature.id);
-    if (existingCard && existingCard.dataset.format === selectedFormat) {
-      // Just update text and title to prevent flickering!
+    const currentUnit = window.cardUnits[feature.id] || (mode === 'linestring' ? 'km' : 'km2');
+    
+    if (existingCard && existingCard.dataset.format === selectedFormat && existingCard.dataset.unit === currentUnit) {
+      // Just update text, inputs, measurements, and title to prevent flickering!
+      const measurementValueEl = existingCard.querySelector('.measurement-value');
+      if (measurementValueEl) {
+        if (mode === 'rectangle' || mode === 'polygon') {
+          const sqM = calculatePolygonAreaSqMeters(feature.geometry.coordinates);
+          measurementValueEl.textContent = formatArea(sqM, currentUnit);
+        } else if (mode === 'linestring') {
+          const m = calculateLineLengthMeters(feature.geometry.coordinates);
+          measurementValueEl.textContent = formatLength(m, currentUnit);
+        }
+      }
+      
       if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
         if (bounds) {
@@ -1060,6 +1170,40 @@ function updateCoordinatesPanel() {
       const expandTitle = isExpanded ? "Collapse Box" : "Expand Box";
       const expandBtnHtml = (selectedFormat !== 'bbox' && selectedFormat !== 'bbox_tlbr' && selectedFormat !== 'latlng') ? `<button class="icon-btn" title="${expandTitle}" onclick="toggleExpand(this)">${expandIcon}</button>` : '';
       
+      let measurementHtml = '';
+      if (mode === 'rectangle' || mode === 'polygon') {
+        const sqMeters = calculatePolygonAreaSqMeters(feature.geometry.coordinates);
+        measurementHtml = `
+          <div class="measurement-bar">
+            <span class="measurement-pill" title="Geodesic Area">
+              <span class="measurement-label">📐 Area:</span>
+              <span class="measurement-value">${formatArea(sqMeters, currentUnit)}</span>
+            </span>
+            <select class="unit-select" onchange="changeMeasurementUnit('${feature.id}', this)" title="Select Area Unit">
+              <option value="km2" ${currentUnit === 'km2' ? 'selected' : ''}>sq km</option>
+              <option value="ha" ${currentUnit === 'ha' ? 'selected' : ''}>hectares</option>
+              <option value="ac" ${currentUnit === 'ac' ? 'selected' : ''}>acres</option>
+              <option value="sqmi" ${currentUnit === 'sqmi' ? 'selected' : ''}>sq mi</option>
+            </select>
+          </div>
+        `;
+      } else if (mode === 'linestring') {
+        const meters = calculateLineLengthMeters(feature.geometry.coordinates);
+        measurementHtml = `
+          <div class="measurement-bar">
+            <span class="measurement-pill" title="Geodesic Length">
+              <span class="measurement-label">📏 Length:</span>
+              <span class="measurement-value">${formatLength(meters, currentUnit)}</span>
+            </span>
+            <select class="unit-select" onchange="changeMeasurementUnit('${feature.id}', this)" title="Select Length Unit">
+              <option value="km" ${currentUnit === 'km' ? 'selected' : ''}>km</option>
+              <option value="mi" ${currentUnit === 'mi' ? 'selected' : ''}>miles</option>
+              <option value="m" ${currentUnit === 'm' ? 'selected' : ''}>meters</option>
+            </select>
+          </div>
+        `;
+      }
+
       let contentHtml = '';
       if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
@@ -1096,19 +1240,19 @@ function updateCoordinatesPanel() {
       }
       
       const cardInnerHtml = `
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <div class="card-header">
+            <div class="card-header-left">
               <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
               ${iconHtml}
-              <input class="title-input" type="text" value="${feature.properties.name || `${type} ${index + 1}`}" style="margin: 0; text-transform: capitalize; background: transparent; border: 1px solid transparent; color: var(--text-color); font-size: 1rem; font-weight: bold; outline: none; padding: 2px 4px; border-radius: 4px; transition: border-color 0.2s; width: 130px;" onchange="updateFeatureName('${feature.id}', this.value)" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
+              <input class="title-input" type="text" value="${feature.properties.name || `${type} ${index + 1}`}" onchange="updateFeatureName('${feature.id}', this.value)" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
             </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <select class="glow-select" style="background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border-color); padding: 0.15rem 0.25rem; border-radius: 4px; outline: none; cursor: pointer; font-size: 0.75rem;" onchange="changeFormat('${feature.id}', this)">
-                ${mode === 'rectangle' ? `
-                  <option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>Bounding Box (Min/Max)</option>
-                  <option value="bbox_tlbr" ${selectedFormat === 'bbox_tlbr' ? 'selected' : ''}>Bounding Box (TL/BR)</option>
+            <div class="card-header-right">
+              <select class="glow-select" onchange="changeFormat('${feature.id}', this)">
+                ${(mode === 'rectangle' || mode === 'polygon') ? `
+                  <option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>BBox (Min/Max)</option>
+                  <option value="bbox_tlbr" ${selectedFormat === 'bbox_tlbr' ? 'selected' : ''}>BBox (TL/BR)</option>
                 ` : ''}
-                ${mode === 'point' ? `<option value="latlng" ${selectedFormat === 'latlng' ? 'selected' : ''}>Lat/Lng Text</option>` : ''}
+                ${mode === 'point' ? `<option value="latlng" ${selectedFormat === 'latlng' ? 'selected' : ''}>Lat/Lng</option>` : ''}
                 <option value="geojson" ${selectedFormat === 'geojson' ? 'selected' : ''}>GeoJSON</option>
                 <option value="wkt" ${selectedFormat === 'wkt' ? 'selected' : ''}>WKT</option>
                 <option value="raw" ${selectedFormat === 'raw' ? 'selected' : ''}>Raw Arrays</option>
@@ -1119,14 +1263,16 @@ function updateCoordinatesPanel() {
             </div>
           </div>
           ${contentHtml}
+          ${measurementHtml}
       `;
       
       if (existingCard) {
         // Update in-place without destroying the element — prevents flicker
         existingCard.dataset.format = selectedFormat;
+        existingCard.dataset.unit = currentUnit;
         existingCard.innerHTML = cardInnerHtml;
       } else {
-        const cardHtml = `<div class="glass-panel geometry-card new-card" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">${cardInnerHtml}</div>`;
+        const cardHtml = `<div class="glass-panel geometry-card new-card" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}" data-unit="${currentUnit}">${cardInnerHtml}</div>`;
         geometryCardsWrapper.insertAdjacentHTML('beforeend', cardHtml);
       }
     }
