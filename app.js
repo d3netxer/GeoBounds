@@ -4,9 +4,25 @@ const map = L.map('map', {
   zoom: 3,
   zoomControl: false // We reposition it later
 });
+window.map = map;
 
 // Add zoom control at bottom left
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+const pointPinLayerGroup = L.layerGroup().addTo(map);
+
+function createPinIcon(color) {
+  const pinSvg = `<svg width="48" height="58" viewBox="0 0 48 58" xmlns="http://www.w3.org/2000/svg" style="display:block; overflow:visible; filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.45)); cursor: pointer;">
+    <path d="M24 8C15.163 8 8 15.163 8 24C8 36 24 50 24 50C24 50 40 36 40 24C40 15.163 32.837 8 24 8Z" fill="${color}" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="24" cy="24" r="5.5" fill="#FFFFFF"/>
+  </svg>`;
+  return L.divIcon({
+    className: 'custom-map-pin-icon',
+    html: pinSvg,
+    iconSize: [48, 58],
+    iconAnchor: [24, 50]
+  });
+}
 
 // Define base tile layers
 const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -82,7 +98,8 @@ const selectMode = new TerraDrawSelectMode({
     selectedLineStringColor: (f) => f.properties.color || '#4285f4',
     selectedPointColor: (f) => f.properties.color || '#4285f4',
     selectedPointOutlineColor: (f) => f.properties.color || '#4285f4',
-    selectedPointOutlineWidth: 3
+    selectedPointOutlineWidth: 3,
+    selectedPointWidth: 16
   }
 });
 
@@ -114,9 +131,10 @@ const draw = new TerraDraw({
     }),
     new TerraDrawPointMode({
       styles: {
-        pointColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
-        pointOutlineColor: (f) => f.properties.color || window.currentDrawingColor || '#4285f4',
-        pointOutlineWidth: 3
+        pointColor: (f) => f.properties.color || window.currentDrawingColor || '#FF3B30',
+        pointOutlineColor: '#ffffff',
+        pointOutlineWidth: 3,
+        pointWidth: 20
       }
     })
   ]
@@ -312,9 +330,137 @@ document.querySelectorAll('.tool-btn').forEach(btn => {
         map.removeLayer(searchPolygonLayer);
         searchPolygonLayer = null;
       }
+      // Clean up directly-added locate markers and tracking
+      if (window._locateMarkers) {
+        window._locateMarkers.forEach(m => map.removeLayer(m.marker || m));
+        window._locateMarkers = [];
+      }
+      if (window._locateFeatureIds) {
+        window._locateFeatureIds = [];
+      }
+      if (window._pointMarkers) {
+        window._pointMarkers.clear();
+      }
+      if (typeof pointPinLayerGroup !== 'undefined') {
+        pointPinLayerGroup.clearLayers();
+      }
       updateCoordinatesPanel();
       document.getElementById('toast-notification').style.display = 'none';
       window.currentDrawingColor = getAvailableColor();
+      return;
+    }
+
+    if (btn.id === 'locate-btn') {
+      if (getActiveShapes().length >= 3) {
+        showLimitToast();
+        return;
+      }
+
+      const originalContent = btn.innerHTML;
+      btn.textContent = '⌛';
+      btn.disabled = true;
+
+      const addPinAtCoords = (lat, lng, name, toastMsg, toastColor) => {
+        try {
+          // Terra Draw's Leaflet adapter accepts at most 9 decimal places.
+          // Browser geolocation and Leaflet map centers can exceed that.
+          const normalizedLat = Number(lat.toFixed(9));
+          const normalizedLng = Number(lng.toFixed(9));
+
+          // 1. Zoom to location & invalidate map size
+          map.setView([normalizedLat, normalizedLng], 15);
+          setTimeout(() => { map.invalidateSize(); }, 100);
+
+          // 2. Block ALL TerraDraw change events during the entire operation
+          window.isUpdatingProgrammatically = true;
+
+          // 3. Add feature to TerraDraw (data model & rendering)
+          const color = getAvailableColor();
+          const featureId = draw.getFeatureId();
+
+          const [addResult] = draw.addFeatures([{
+            id: featureId,
+            type: "Feature",
+            properties: {
+              mode: "point",
+              name: name || "My Location",
+              color: color
+            },
+            geometry: {
+              type: "Point",
+              coordinates: [normalizedLng, normalizedLat]
+            }
+          }]);
+          if (!addResult || !addResult.valid) {
+            throw new Error(addResult?.reason || 'Location point could not be added');
+          }
+
+          // 4. Switch to select mode and select feature
+          draw.setMode('select');
+          try { draw.selectFeature(featureId); } catch(e) {}
+          document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+
+          // 5. Track locate feature ID & create direct Leaflet pin marker
+          if (!window._locateFeatureIds) window._locateFeatureIds = [];
+          window._locateFeatureIds.push(featureId);
+
+          const pinIcon = createPinIcon(color);
+          const locateMarker = L.marker([normalizedLat, normalizedLng], { icon: pinIcon, zIndexOffset: 1000 }).addTo(map);
+          if (!window._locateMarkers) window._locateMarkers = [];
+          window._locateMarkers.push({ marker: locateMarker, featureId: featureId });
+
+          // 6. Cancel any pending debounced updates
+          if (updatePanelTimer) {
+            cancelAnimationFrame(updatePanelTimer);
+            updatePanelTimer = null;
+          }
+
+          // 7. Update coordinate cards and map pin markers synchronously
+          updateCoordinatesPanel();
+
+          // 8. Unblock change events
+          window.isUpdatingProgrammatically = false;
+
+          // Terra Draw updates synchronously today, but refreshing on the next
+          // frame also keeps the coordinate card correct if rendering is deferred.
+          requestAnimationFrame(updateCoordinatesPanel);
+
+          if (window.showToast) {
+            window.showToast(toastMsg, toastColor);
+          }
+        } catch (err) {
+          window.isUpdatingProgrammatically = false;
+          console.error('[LOCATE] Error in addPinAtCoords:', err);
+        } finally {
+          btn.innerHTML = originalContent;
+          btn.disabled = false;
+        }
+      };
+
+      if (!navigator.geolocation) {
+        const center = map.getCenter();
+        addPinAtCoords(center.lat, center.lng, "Map Center", "Geolocation unsupported - added pin at center", "#ff9f0a");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          console.log('[LOCATE] Geolocation success:', lat, lng);
+          addPinAtCoords(lat, lng, "My Location", "Zoomed to location & added pin!", "#3fb950");
+        },
+        (error) => {
+          console.warn('[LOCATE] Geolocation error or denied:', error);
+          const center = map.getCenter();
+          let msg = "Location unavailable - added pin at map center";
+          if (error.code === error.PERMISSION_DENIED) {
+            msg = "Location permission denied - added pin at map center";
+          }
+          addPinAtCoords(center.lat, center.lng, "Map Center", msg, "#ff9f0a");
+        },
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+      );
       return;
     }
     
@@ -354,65 +500,58 @@ draw.on('deselect', () => {
   debouncedUpdatePanel();
 });
 draw.on('finish', (eventId) => {
-  setTimeout(() => {
-    let id = typeof eventId === 'object' ? (eventId.id || eventId.featureId) : eventId;
-    
-    const snapshot = getActiveShapes();
-    if (snapshot.length === 0) return;
-    
-    if (!id) {
-      id = snapshot[snapshot.length - 1].id;
-    }
-    
-    // Enforce 3 shape limit if they managed to draw while already at limit
-    if (snapshot.length > 3) {
-      try { draw.removeFeatures([id]); } catch(e) {}
-      showLimitToast();
-      draw.setMode('select');
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      return;
-    }
-    
-    // Trigger notification immediately on 3rd shape
-    if (snapshot.length === 3) {
-      showLimitToast();
-    }
-    
-    // Assign color to the new feature
-    const feature = snapshot.find(f => f.id === id);
-    if (feature && !feature.properties.color) {
-      const availableColor = window.currentDrawingColor || getAvailableColor();
-      feature.properties = feature.properties || {};
-      feature.properties.color = availableColor;
-      
-      try {
-        window.isUpdatingProgrammatically = true;
-        draw.removeFeatures([id]);
-        draw.addFeatures([feature]);
-        window.isUpdatingProgrammatically = false;
-      } catch(e) {
-        window.isUpdatingProgrammatically = false;
-      }
-    }
-    
-    window.currentDrawingColor = getAvailableColor();
-    
+  let id = typeof eventId === 'object' ? (eventId.id || eventId.featureId) : eventId;
+
+  const snapshot = getActiveShapes();
+  if (snapshot.length === 0) return;
+
+  if (!id) {
+    id = snapshot[snapshot.length - 1].id;
+  }
+
+  // Enforce 3 shape limit if they managed to draw while already at limit
+  if (snapshot.length > 3) {
+    try { draw.removeFeatures([id]); } catch(e) {}
+    showLimitToast();
     draw.setMode('select');
-    
-    setTimeout(() => {
-      try {
-        draw.selectFeature(id);
-      } catch (e) {
-        console.log('Auto-select failed:', e);
-        try {
-          const snap = draw.getSnapshot();
-          if (snap.length > 0) draw.selectFeature(snap[0].id);
-        } catch(e2) {}
-      }
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      updateCoordinatesPanel();
-    }, 50);
-  }, 50);
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    return;
+  }
+
+  // Trigger notification immediately on 3rd shape
+  if (snapshot.length === 3) {
+    showLimitToast();
+  }
+
+  window.isUpdatingProgrammatically = true;
+
+  // Assign color to the new feature
+  const feature = snapshot.find(f => f.id === id);
+  if (feature) {
+    feature.properties = feature.properties || {};
+    if (!feature.properties.color) {
+      feature.properties.color = window.currentDrawingColor || getAvailableColor();
+    }
+    if (!feature.properties.mode) {
+      feature.properties.mode = feature.geometry.type === 'Point' ? 'point' : (feature.geometry.type === 'LineString' ? 'linestring' : 'polygon');
+    }
+    try {
+      draw.removeFeatures([id]);
+      draw.addFeatures([feature]);
+    } catch(e) {}
+  }
+
+  window.currentDrawingColor = getAvailableColor();
+
+  try {
+    draw.setMode('select');
+    draw.selectFeature(id);
+  } catch (e) {}
+
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  updateCoordinatesPanel();
+
+  window.isUpdatingProgrammatically = false;
 });
 
 // UI Elements
@@ -441,6 +580,103 @@ function calculateBounds(features) {
   return hasCoords ? { minX, minY, maxX, maxY } : null;
 }
 
+// Geodesic Area calculation in square meters (WGS84 Earth authalic radius = 6378137m)
+function calculatePolygonAreaSqMeters(coordinates) {
+  if (!coordinates || !coordinates.length) return 0;
+  const ring = Array.isArray(coordinates[0][0]) ? coordinates[0] : coordinates;
+  if (ring.length < 3) return 0;
+
+  const RAD = Math.PI / 180;
+  const EARTH_RADIUS = 6378137;
+  let area = 0;
+
+  for (let i = 0; i < ring.length - 1; i++) {
+    const p1 = ring[i];
+    const p2 = ring[i + 1];
+    area += (p2[0] * RAD - p1[0] * RAD) * (2 + Math.sin(p1[1] * RAD) + Math.sin(p2[1] * RAD));
+  }
+
+  return Math.abs(area * EARTH_RADIUS * EARTH_RADIUS / 2);
+}
+
+// Geodesic Line Length calculation in meters
+function calculateLineLengthMeters(coordinates) {
+  if (!coordinates || !coordinates.length) return 0;
+  const points = Array.isArray(coordinates[0][0]) ? coordinates[0] : coordinates;
+  if (points.length < 2) return 0;
+  let totalMeters = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = L.latLng(points[i][1], points[i][0]);
+    const p2 = L.latLng(points[i + 1][1], points[i + 1][0]);
+    totalMeters += p1.distanceTo(p2);
+  }
+  return totalMeters;
+}
+
+// Format Area according to selected unit (no decimal points)
+function formatArea(sqMeters, unit) {
+  if (!sqMeters || sqMeters === 0) return '0 sq km';
+  let value, unitLabel;
+  switch(unit) {
+    case 'ha':
+      value = sqMeters / 10000;
+      unitLabel = 'ha';
+      break;
+    case 'ac':
+      value = sqMeters / 4046.8564224;
+      unitLabel = 'ac';
+      break;
+    case 'sqmi':
+      value = sqMeters / 2589988.11;
+      unitLabel = 'sq mi';
+      break;
+    case 'km2':
+    default:
+      value = sqMeters / 1000000;
+      unitLabel = 'sq km';
+      break;
+  }
+  const formattedVal = Math.round(value).toLocaleString();
+  return `${formattedVal} ${unitLabel}`;
+}
+
+// Format Length according to selected unit (km, mi with decimals; m without decimals)
+function formatLength(meters, unit) {
+  if (!meters || meters === 0) return '0 km';
+  let value, unitLabel;
+  switch(unit) {
+    case 'mi':
+      value = meters / 1609.344;
+      unitLabel = 'mi';
+      break;
+    case 'm':
+      value = meters;
+      unitLabel = 'm';
+      break;
+    case 'km':
+    default:
+      value = meters / 1000;
+      unitLabel = 'km';
+      break;
+  }
+  let formattedVal;
+  if (unit === 'm') {
+    formattedVal = Math.round(value).toLocaleString();
+  } else {
+    formattedVal = value >= 1000
+      ? value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : value.toFixed(2);
+  }
+  return `${formattedVal} ${unitLabel}`;
+}
+
+window.cardUnits = window.cardUnits || {};
+
+window.changeMeasurementUnit = function(id, selectEl) {
+  window.cardUnits[id] = selectEl.value;
+  updateCoordinatesPanel();
+};
+
 function geojsonToWkt(geometry) {
   const type = geometry.type.toUpperCase();
   const coords = geometry.coordinates;
@@ -464,6 +700,20 @@ window.deleteShape = function(id) {
     window.currentDrawingColor = getAvailableColor();
     if (window.expandedCards && window.expandedCards[id] !== undefined) {
       delete window.expandedCards[id];
+    }
+    if (window._locateFeatureIds && window._locateFeatureIds.includes(id)) {
+      window._locateFeatureIds = window._locateFeatureIds.filter(fid => fid !== id);
+      if (window._locateMarkers) {
+        const entry = window._locateMarkers.find(m => m.featureId === id);
+        if (entry) {
+          map.removeLayer(entry.marker || entry);
+          window._locateMarkers = window._locateMarkers.filter(m => m.featureId !== id);
+        }
+      }
+    }
+    if (window._pointMarkers && window._pointMarkers.has(id)) {
+      pointPinLayerGroup.removeLayer(window._pointMarkers.get(id).marker);
+      window._pointMarkers.delete(id);
     }
     updateCoordinatesPanel();
   } catch(e) {
@@ -686,7 +936,7 @@ window.updateBoundingBoxFromInputs = function(id) {
     if (!isNaN(minX) && !isNaN(minY) && !isNaN(maxX) && !isNaN(maxY)) {
       const snapshot = getActiveShapes();
       const feature = snapshot.find(f => f.id === id);
-      
+
       if (feature) {
         if (minX >= maxX || minY >= maxY) {
           alert('Invalid bounding box: Min/Top-Left X must be < Max/Bottom-Right X, and Min/Bottom-Right Y must be < Max/Top-Left Y.');
@@ -769,6 +1019,43 @@ function updateCoordinatesPanel() {
       }
     }
   });
+
+  // Update map pin markers for Point features (Smart Marker Sync to eliminate redraw flicker)
+  if (typeof pointPinLayerGroup !== 'undefined') {
+    window._pointMarkers = window._pointMarkers || new Map();
+    const activePointFeatures = snapshot.filter(f => f.geometry && f.geometry.type === 'Point' && !(window._locateFeatureIds && window._locateFeatureIds.includes(f.id)));
+    const activePointIds = new Set(activePointFeatures.map(f => f.id));
+
+    // Clean up markers for deleted features
+    for (const [id, item] of window._pointMarkers.entries()) {
+      if (!activePointIds.has(id)) {
+        pointPinLayerGroup.removeLayer(item.marker);
+        window._pointMarkers.delete(id);
+      }
+    }
+
+    // Add or update markers for active point features
+    activePointFeatures.forEach(f => {
+      const [lng, lat] = f.geometry.coordinates;
+      const color = f.properties.color || window.currentDrawingColor || '#FF3B30';
+
+      if (window._pointMarkers.has(f.id)) {
+        const existing = window._pointMarkers.get(f.id);
+        if (existing.lat !== lat || existing.lng !== lng) {
+          existing.marker.setLatLng([lat, lng]);
+          existing.lat = lat;
+          existing.lng = lng;
+        }
+        if (existing.color !== color) {
+          existing.marker.setIcon(createPinIcon(color));
+          existing.color = color;
+        }
+      } else {
+        const marker = L.marker([lat, lng], { icon: createPinIcon(color), zIndexOffset: 1000 }).addTo(pointPinLayerGroup);
+        window._pointMarkers.set(f.id, { marker, color, lat, lng });
+      }
+    });
+  }
   
   if (!snapshot || snapshot.length === 0) {
     geometryCardsWrapper.innerHTML = `
@@ -794,7 +1081,7 @@ function updateCoordinatesPanel() {
   snapshot.forEach((feature, index) => {
     const color = feature.properties.color || window.currentDrawingColor || '#4285f4';
     const type = feature.geometry.type;
-    const mode = feature.properties.mode || 'polygon';
+    const mode = feature.properties.mode || (type === 'Point' ? 'point' : (type === 'LineString' ? 'linestring' : 'polygon'));
     const selectedFormat = feature.properties.format || (mode === 'rectangle' ? 'bbox' : (mode === 'point' ? 'latlng' : 'geojson'));
     
     // Calculate content text
@@ -808,12 +1095,25 @@ function updateCoordinatesPanel() {
     } else if (selectedFormat === 'latlng') {
       const lon = feature.geometry.coordinates[0];
       const lat = feature.geometry.coordinates[1];
-      newText = `latitude:  ${lat.toFixed(4)} longitude: ${lon.toFixed(4)}`;
+      newText = `latitude:  ${lat.toFixed(4)}\nlongitude: ${lon.toFixed(4)}`;
     }
     
     const existingCard = document.getElementById('card-' + feature.id);
-    if (existingCard && existingCard.dataset.format === selectedFormat) {
-      // Just update text and title to prevent flickering!
+    const currentUnit = window.cardUnits[feature.id] || (mode === 'linestring' ? 'km' : 'km2');
+    
+    if (existingCard && existingCard.dataset.format === selectedFormat && existingCard.dataset.unit === currentUnit) {
+      // Just update text, inputs, measurements, and title to prevent flickering!
+      const measurementValueEl = existingCard.querySelector('.measurement-value');
+      if (measurementValueEl) {
+        if (mode === 'rectangle' || mode === 'polygon') {
+          const sqM = calculatePolygonAreaSqMeters(feature.geometry.coordinates);
+          measurementValueEl.textContent = formatArea(sqM, currentUnit);
+        } else if (mode === 'linestring') {
+          const m = calculateLineLengthMeters(feature.geometry.coordinates);
+          measurementValueEl.textContent = formatLength(m, currentUnit);
+        }
+      }
+      
       if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
         if (bounds) {
@@ -870,6 +1170,40 @@ function updateCoordinatesPanel() {
       const expandTitle = isExpanded ? "Collapse Box" : "Expand Box";
       const expandBtnHtml = (selectedFormat !== 'bbox' && selectedFormat !== 'bbox_tlbr' && selectedFormat !== 'latlng') ? `<button class="icon-btn" title="${expandTitle}" onclick="toggleExpand(this)">${expandIcon}</button>` : '';
       
+      let measurementHtml = '';
+      if (mode === 'rectangle' || mode === 'polygon') {
+        const sqMeters = calculatePolygonAreaSqMeters(feature.geometry.coordinates);
+        measurementHtml = `
+          <div class="measurement-bar">
+            <span class="measurement-pill" title="Geodesic Area">
+              <span class="measurement-label">📐 Area:</span>
+              <span class="measurement-value">${formatArea(sqMeters, currentUnit)}</span>
+            </span>
+            <select class="unit-select" onchange="changeMeasurementUnit('${feature.id}', this)" title="Select Area Unit">
+              <option value="km2" ${currentUnit === 'km2' ? 'selected' : ''}>sq km</option>
+              <option value="ha" ${currentUnit === 'ha' ? 'selected' : ''}>hectares</option>
+              <option value="ac" ${currentUnit === 'ac' ? 'selected' : ''}>acres</option>
+              <option value="sqmi" ${currentUnit === 'sqmi' ? 'selected' : ''}>sq mi</option>
+            </select>
+          </div>
+        `;
+      } else if (mode === 'linestring') {
+        const meters = calculateLineLengthMeters(feature.geometry.coordinates);
+        measurementHtml = `
+          <div class="measurement-bar">
+            <span class="measurement-pill" title="Geodesic Length">
+              <span class="measurement-label">📏 Length:</span>
+              <span class="measurement-value">${formatLength(meters, currentUnit)}</span>
+            </span>
+            <select class="unit-select" onchange="changeMeasurementUnit('${feature.id}', this)" title="Select Length Unit">
+              <option value="km" ${currentUnit === 'km' ? 'selected' : ''}>km</option>
+              <option value="mi" ${currentUnit === 'mi' ? 'selected' : ''}>miles</option>
+              <option value="m" ${currentUnit === 'm' ? 'selected' : ''}>meters</option>
+            </select>
+          </div>
+        `;
+      }
+
       let contentHtml = '';
       if (selectedFormat === 'bbox' || selectedFormat === 'bbox_tlbr') {
         const bounds = calculateBounds([feature]);
@@ -898,27 +1232,27 @@ function updateCoordinatesPanel() {
           `;
         }
       } else {
-        const defaultRows = selectedFormat === 'latlng' ? 1 : 5;
-        const currentRows = selectedFormat === 'latlng' ? 1 : (isExpanded ? 20 : 5);
+        const defaultRows = selectedFormat === 'latlng' ? 2 : 5;
+        const currentRows = selectedFormat === 'latlng' ? 2 : (isExpanded ? 20 : 5);
         contentHtml = `
           <textarea rows="${currentRows}" data-default-rows="${defaultRows}" style="width: 100%; border-radius: 6px; padding: 0.5rem; background: rgba(0, 0, 0, 0.2); color: var(--text-color); border: 1px solid var(--border-color); font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; resize: vertical;" readonly>${newText}</textarea>
         `;
       }
       
       const cardInnerHtml = `
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <div class="card-header">
+            <div class="card-header-left">
               <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
               ${iconHtml}
-              <input class="title-input" type="text" value="${feature.properties.name || `${type} ${index + 1}`}" style="margin: 0; text-transform: capitalize; background: transparent; border: 1px solid transparent; color: var(--text-color); font-size: 1rem; font-weight: bold; outline: none; padding: 2px 4px; border-radius: 4px; transition: border-color 0.2s; width: 130px;" onchange="updateFeatureName('${feature.id}', this.value)" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
+              <input class="title-input" type="text" value="${feature.properties.name || `${type} ${index + 1}`}" onchange="updateFeatureName('${feature.id}', this.value)" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
             </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <select class="glow-select" style="background: rgba(0,0,0,0.3); color: white; border: 1px solid var(--border-color); padding: 0.15rem 0.25rem; border-radius: 4px; outline: none; cursor: pointer; font-size: 0.75rem;" onchange="changeFormat('${feature.id}', this)">
-                ${mode === 'rectangle' ? `
-                  <option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>Bounding Box (Min/Max)</option>
-                  <option value="bbox_tlbr" ${selectedFormat === 'bbox_tlbr' ? 'selected' : ''}>Bounding Box (TL/BR)</option>
+            <div class="card-header-right">
+              <select class="glow-select" onchange="changeFormat('${feature.id}', this)">
+                ${(mode === 'rectangle' || mode === 'polygon') ? `
+                  <option value="bbox" ${selectedFormat === 'bbox' ? 'selected' : ''}>BBox (Min/Max)</option>
+                  <option value="bbox_tlbr" ${selectedFormat === 'bbox_tlbr' ? 'selected' : ''}>BBox (TL/BR)</option>
                 ` : ''}
-                ${mode === 'point' ? `<option value="latlng" ${selectedFormat === 'latlng' ? 'selected' : ''}>Lat/Lng Text</option>` : ''}
+                ${mode === 'point' ? `<option value="latlng" ${selectedFormat === 'latlng' ? 'selected' : ''}>Lat/Lng</option>` : ''}
                 <option value="geojson" ${selectedFormat === 'geojson' ? 'selected' : ''}>GeoJSON</option>
                 <option value="wkt" ${selectedFormat === 'wkt' ? 'selected' : ''}>WKT</option>
                 <option value="raw" ${selectedFormat === 'raw' ? 'selected' : ''}>Raw Arrays</option>
@@ -929,14 +1263,16 @@ function updateCoordinatesPanel() {
             </div>
           </div>
           ${contentHtml}
+          ${measurementHtml}
       `;
       
       if (existingCard) {
         // Update in-place without destroying the element — prevents flicker
         existingCard.dataset.format = selectedFormat;
+        existingCard.dataset.unit = currentUnit;
         existingCard.innerHTML = cardInnerHtml;
       } else {
-        const cardHtml = `<div class="glass-panel geometry-card new-card" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}">${cardInnerHtml}</div>`;
+        const cardHtml = `<div class="glass-panel geometry-card new-card" style="padding: 1rem;" id="card-${feature.id}" data-format="${selectedFormat}" data-unit="${currentUnit}">${cardInnerHtml}</div>`;
         geometryCardsWrapper.insertAdjacentHTML('beforeend', cardHtml);
       }
     }

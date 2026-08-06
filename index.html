@@ -33,7 +33,7 @@
   <!-- Terra Draw Leaflet Adapter -->
   <script src="https://unpkg.com/terra-draw-leaflet-adapter@1.0.3/dist/terra-draw-leaflet-adapter.umd.js"></script>
 
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 
 <body>
@@ -46,11 +46,18 @@
     <div id="map-container">
       <div id="map"></div>
 
-      <div id="terra-toolbar" class="glass-panel" style="position: absolute; left: 1rem; top: 1rem; transform: none; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem; width: auto; max-width: none; z-index: 1000; bottom: auto;">
+      <div id="terra-toolbar" class="glass-panel terra-toolbar">
         <button class="tool-btn" data-mode="rectangle" title="Draw Bounding Box">◻</button>
         <button class="tool-btn" data-mode="polygon" title="Draw Polygon">⬡</button>
         <button class="tool-btn" data-mode="linestring" title="Draw Line">╱</button>
         <button class="tool-btn" data-mode="point" title="Draw Point">📍</button>
+        <button class="tool-btn" id="locate-btn" title="Locate My Position & Pin" aria-label="Locate My Position & Pin">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+            <path d="M12 2V5M12 19V22M2 12H5M19 12H22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
         <button class="tool-btn" id="clear-map-btn" title="Clear Map">🗑</button>
       </div>
 
@@ -67,9 +74,8 @@
       </div>
 
       <div id="geometry-output-container" style="position: absolute; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: 0.5rem; justify-content: flex-end; z-index: 1000; max-height: calc(100vh - 2rem); pointer-events: none;">
-        
-        <!-- Individual Geometry Cards will be injected here -->
-        <div id="geometry-cards-wrapper" style="display: flex; flex-direction: column; gap: 0.5rem; pointer-events: auto;">
+        <!-- Container holding up to 3 individual cards -->
+        <div id="geometry-cards-wrapper" style="pointer-events: auto; display: flex; flex-direction: column; gap: 0.5rem; width: 360px; max-width: calc(100vw - 2rem); max-height: 80vh; overflow-y: auto; padding-right: 4px;">
           <!-- Placeholder if empty -->
           <div class="glass-panel geometry-card placeholder-card">
             <div class="panel-content" style="padding: 1rem;">
@@ -82,7 +88,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=1008"></script>
+  <script src="app.js?v=1030"></script>
 </body>
 
 </html>
