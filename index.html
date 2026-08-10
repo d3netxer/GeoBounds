@@ -14,7 +14,29 @@
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bounding Box Map</title>
+  
+  <!-- Primary Meta Tags -->
+  <title>GeoBounds - Bounding Box & Polygon Map Drawing Tool</title>
+  <meta name="title" content="GeoBounds - Bounding Box & Polygon Map Drawing Tool">
+  <meta name="description" content="Draw bounding boxes, polygons, and lines on an interactive map. Instantly capture coordinates in various formats and calculate area or length with GeoBounds.">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://geobounds.com/">
+  <meta property="og:title" content="GeoBounds - Bounding Box & Polygon Map Drawing Tool">
+  <meta property="og:description" content="Draw bounding boxes, polygons, and lines on an interactive map. Instantly capture coordinates in various formats and calculate area or length with GeoBounds.">
+  <meta property="og:image" content="https://geobounds.com/map_screenshot.png">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://geobounds.com/">
+  <meta property="twitter:title" content="GeoBounds - Bounding Box & Polygon Map Drawing Tool">
+  <meta property="twitter:description" content="Draw bounding boxes, polygons, and lines on an interactive map. Instantly capture coordinates in various formats and calculate area or length with GeoBounds.">
+  <meta property="twitter:image" content="https://geobounds.com/map_screenshot.png">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://geobounds.com/">
+
   <link rel="icon" type="image/png" href="favicon.png?v=1">
 
   <!-- Fonts -->
@@ -47,10 +69,10 @@
       <div id="map"></div>
 
       <div id="terra-toolbar" class="glass-panel terra-toolbar">
-        <button class="tool-btn" data-mode="rectangle" title="Draw Bounding Box">◻</button>
-        <button class="tool-btn" data-mode="polygon" title="Draw Polygon">⬡</button>
-        <button class="tool-btn" data-mode="linestring" title="Draw Line">╱</button>
-        <button class="tool-btn" data-mode="point" title="Draw Point">📍</button>
+        <button class="tool-btn" data-mode="rectangle" title="Draw Bounding Box" aria-label="Draw Bounding Box">◻</button>
+        <button class="tool-btn" data-mode="polygon" title="Draw Polygon" aria-label="Draw Polygon">⬡</button>
+        <button class="tool-btn" data-mode="linestring" title="Draw Line" aria-label="Draw Line">╱</button>
+        <button class="tool-btn" data-mode="point" title="Draw Point" aria-label="Draw Point">📍</button>
         <button class="tool-btn" id="locate-btn" title="Locate My Position & Pin" aria-label="Locate My Position & Pin">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.8"/>
@@ -58,7 +80,7 @@
             <path d="M12 2V5M12 19V22M2 12H5M19 12H22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
         </button>
-        <button class="tool-btn" id="clear-map-btn" title="Clear Map">🗑</button>
+        <button class="tool-btn" id="clear-map-btn" title="Clear Map" aria-label="Clear Map">🗑</button>
       </div>
 
       <div id="search-panel" class="glass-panel search-panel">
