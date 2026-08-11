@@ -1540,3 +1540,34 @@ mapContainerEl.addEventListener('drop', (e) => {
     }
   }
 });
+
+// Modal Logic
+document.addEventListener('DOMContentLoaded', () => {
+  const infoBtn = document.getElementById('info-btn');
+  const closeModalBtn = document.getElementById('close-modal-btn');
+  const modal = document.getElementById('info-modal');
+
+  if (infoBtn && closeModalBtn && modal) {
+    infoBtn.addEventListener('click', () => {
+      modal.classList.remove('hidden');
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+
+    // Close on outside click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
+    });
+
+    // Close on escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+        modal.classList.add('hidden');
+      }
+    });
+  }
+});

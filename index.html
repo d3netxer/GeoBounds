@@ -61,8 +61,13 @@
 <body>
   <div id="app-container">
     <header class="app-header">
-      <h1>GeoBounds</h1>
-      <p>Draw shapes on the map to capture their coordinates instantly in various formats.</p>
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <h1>GeoBounds</h1>
+          <p>Draw shapes on the map to capture their coordinates instantly in various formats.</p>
+        </div>
+        <button id="info-btn" class="glow-btn" aria-label="How it works">How it Works</button>
+      </div>
     </header>
 
     <div id="map-container">
@@ -106,6 +111,26 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- How it Works Modal -->
+  <div id="info-modal" class="modal-overlay hidden">
+    <div class="glass-panel modal-content">
+      <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;">How it Works</h3>
+        <button id="close-modal-btn" class="icon-btn" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body" style="font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary);">
+        <p style="margin-bottom: 1rem;"><strong>GeoBounds</strong> is a fast, interactive tool for extracting geographical coordinates and measurements.</p>
+        <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+          <li><strong>Draw Shapes:</strong> Use the toolbar on the left to draw bounding boxes, polygons, lines, or points.</li>
+          <li><strong>Extract Coordinates:</strong> Click on any shape's card to copy its coordinates in formats like GeoJSON, WKT, or raw Bounds.</li>
+          <li><strong>Live Measurements:</strong> See real-time calculations for area (Hectares, Acres, Sq Km) and length (Meters, Kilometers, Miles).</li>
+          <li><strong>Search:</strong> Use the top right search bar to instantly jump to any address or city in the world.</li>
+        </ul>
+        <p>Your shapes are kept locally in your browser. Perfect for GIS developers, data scientists, and mapping enthusiasts.</p>
       </div>
     </div>
   </div>
